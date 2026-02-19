@@ -2,6 +2,8 @@
 #define IMU_H
 
 #include "driver/spi_master.h"
+#include "Device.h"
+#include "SPIDevice.h"
 
 class IMU {
     public:

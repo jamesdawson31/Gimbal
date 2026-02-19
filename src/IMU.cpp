@@ -5,6 +5,6 @@
 #define REG_
 
 
-IMU::IMU() {
+IMU::IMU(int ) {
     // 
 }

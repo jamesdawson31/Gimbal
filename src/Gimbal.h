@@ -13,7 +13,7 @@ class Gimbal
         Gimbal(SPIBus* spi_bus, IMU* imu, Encoder* yaw, Encoder* pitch, Encoder* roll);
 
         esp_err_t Gimbal::setup();
-        esp_err_t Gimbal::update();
+        void Gimbal::update();
 
     private:
         // 

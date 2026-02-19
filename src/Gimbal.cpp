@@ -15,10 +15,26 @@ esp_err_t Gimbal::setup()
     // Check device status 
 
     // Initialise SPIBus
-    spi_bus->initialise();
+    _spi_bus->initialise();
 
     // Initialise IMU
+    _imu->begin();
+
     // Initialise YAW Encoder
+
+
     // Initialise PITCH Encoder
+
+
     // Initialise ROLL Encoder
+
+
+
+    // Setup interrupts etc.
+}
+
+void Gimbal::update()
+{
+    // Get sensor updates and run control loop here
+    // Implement control 
 }

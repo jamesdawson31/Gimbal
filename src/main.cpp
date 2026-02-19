@@ -40,7 +40,7 @@ extern "C" void app_main(void) {
     Gimbal gimbal();
 
     // Initialise Gimbal
-    ESP_ERR_CHECK(Gimbal.setup());
+    
 
     
 

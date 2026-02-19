@@ -7,4 +7,9 @@
 
 IMU::IMU(int cs_pin) : _cs_pin(cs_pin), _spi_handle(nullptr) {}
 
-IMU::
+esp_err_t IMU::begin()
+{
+    // Configure device (based on ESP32 SPI library)
+    spi_device_interface_config_t devcfg = {};
+    devcfg.clock_speed_hz = 10 * 1e6                // 10 MHz
+}

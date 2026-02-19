@@ -13,11 +13,17 @@
 #define PIN_SPI_MISO            37
 #define PIN_SPI_SCLK            36
 #define PIN_SPI_IMU_CS          34
-#define PIN_SPI_ENC_1_CS        9
-#define PIN_SPI_ENC_2_CS        8
-#define PIN_SPI_ENC_3_CS        7
+#define PIN_SPI_ENC_YAW_CS        9
+#define PIN_SPI_ENC_PITCH_CS        8
+#define PIN_SPI_ENC_ROLL_CS        7
 // Add BMS and power management stuff later
 // #define 
+
+// Static allocation
+IMU imu(PIN_SPI_IMU_CS);
+Encoder yaw_enc(PIN_SPI_ENC_YAW_CS);
+Encoder pitch_enc();
+Encoder roll_enc();
 
 
 // Main

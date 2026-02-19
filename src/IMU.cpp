@@ -5,6 +5,6 @@
 #define REG_
 
 
-IMU::IMU(int ) {
-    // 
-}
+IMU::IMU(int cs_pin) : _cs_pin(cs_pin), _spi_handle(nullptr) {}
+
+IMU

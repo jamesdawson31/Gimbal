@@ -3,7 +3,7 @@
 
 #include "Device.h"
 
-class SPIDevice {
+class SPIDevice : public Device {
     protected:
 
 };

@@ -5,7 +5,8 @@
 #include "Device.h"
 #include "SPIDevice.h"
 
-class IMU {
+class IMU : public SPIDevice 
+{
     public:
         // Public attributes
         IMU(int cs_pin);

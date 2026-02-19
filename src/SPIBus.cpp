@@ -2,6 +2,9 @@
 
 #include "driver/spi_master.h"
 
+
+SPIBus::SPIBus(int mosi, int miso, int sclk) : _mosi(mosi, )
+
 spi_host_device_t SPIBus::get_host() {
     return SPI2_HOST;
 }

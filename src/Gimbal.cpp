@@ -9,3 +9,16 @@ Gimbal::Gimbal(IMU* imu, Encoder* yaw, Encoder* pitch, Encoder* roll)
     _components[2] = pitch;
     _components[3] = roll;
 }
+
+esp_err_t Gimbal::setup() 
+{
+    // Check device status 
+
+    // Initialise SPIBus
+    spi_bus->initialise();
+
+    // Initialise IMU
+    // Initialise YAW Encoder
+    // Initialise PITCH Encoder
+    // Initialise ROLL Encoder
+}

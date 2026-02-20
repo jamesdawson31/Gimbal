@@ -16,13 +16,11 @@ class Gimbal
         // void Gimbal::update();      // change datatype later
 
     private:
-        // 
+        // Pointer to the SPI bus
+        SPIBus* _spi_bus;
 
         // Array of pointers to devices
         SPIDevice* _spi_components[4];
-
-        // Pointer to the SPI bus
-        SPIBus* _spi_bus;
 
         // Individual pointers to specific devices
         IMU* _imu;

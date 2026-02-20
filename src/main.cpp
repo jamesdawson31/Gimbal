@@ -22,12 +22,13 @@
 // Add BMS and power management stuff later
 // #define 
 
-// Static allocation
-SPIBus  spi_bus(PIN_SPI_MOSI, PIN_SPI_MISO, PIN_SPI_SCLK);
+// Initialisation of classes
+SPIBus  spi_bus_2(SPI2_HOST, PIN_SPI_MOSI, PIN_SPI_MISO, PIN_SPI_SCLK);
 IMU     imu(PIN_SPI_IMU_CS);
 Encoder yaw_enc(PIN_SPI_ENC_YAW_CS);
 Encoder pitch_enc(PIN_SPI_ENC_PITCH_CS);
 Encoder roll_enc(PIN_SPI_ENC_ROLL_CS);
+Gimbal gimbal(&spi_bus_2, &imu, &yaw_enc, &pitch_enc, &roll_enc);
 
 // -------- CAN OPTIMISE INTEGER SIZES LATER!!! --------
 
@@ -36,12 +37,10 @@ extern "C" void app_main(void) {
     // This tells the C++ compiler: 
     // "Don't mangle this name. Keep it exactly as it is (C-style)."
 
-    // 
-    Gimbal gimbal();
-
-    // Initialise Gimbal
+    gimbal.setup();
     
 
+    // Initialise Gimbal
     
 
 }

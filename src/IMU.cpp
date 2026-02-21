@@ -18,3 +18,4 @@ esp_err_t IMU::begin(spi_host_device_t spi_host)
 
     return spi_bus_add_device(spi_host, &devcfg, &_spi_handle);
 }
+

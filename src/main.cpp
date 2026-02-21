@@ -33,14 +33,32 @@ Gimbal gimbal(&spi_bus_2, &imu, &yaw_enc, &pitch_enc, &roll_enc);
 // -------- CAN OPTIMISE INTEGER SIZES LATER!!! --------
 
 // Main
-extern "C" void app_main(void) {
+extern "C" void app_main(void) 
+{
     // This tells the C++ compiler: 
     // "Don't mangle this name. Keep it exactly as it is (C-style)."
 
-    gimbal.setup();
+    // 2. Call setup and capture the result
+    esp_err_t err = gimbal.setup();
+
+    // 3. Evaluate the result
+    if (err != ESP_OK) {
+        // Use the built-in error-to-string helper for debugging
+        printf("Gimbal Setup FAILED: %s (0x%X)\n", esp_err_to_name(err), err);
+        
+        // Safety: Don't start the PID loop if the IMU or Encoders are offline
+        abort();
+    }
+    else {
+        
+    }
     
 
     // Initialise Gimbal
+    while (true) {
+        printf("Hi\n");
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
     
 
 }

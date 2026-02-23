@@ -2,6 +2,7 @@
 #define ENCODER_H
 
 #include "SPIDevice.h"
+#include "esp_log.h"
 
 class Encoder : public SPIDevice 
 {

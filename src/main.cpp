@@ -53,7 +53,6 @@ extern "C" void app_main(void)
         
     }
     
-
     // Initialise Gimbal
     while (true) {
         printf("Hi\n");

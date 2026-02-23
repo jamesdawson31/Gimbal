@@ -9,6 +9,10 @@
 // bit 8-15: data DO(7:0) (read mode). This is the data that is read from the device (MSb first).
 // bit 16-...: data DO(...-8). Further data in multiple byte reads.
 
+// The memory in the IMU is partitioned into "banks". 
+// The value of the FUNC_CFG_ACCESS register determines which bank is active. 
+// 
+
 struct Quaternion {
     float x, y, z, w;
 };
@@ -25,6 +29,11 @@ class IMU : public SPIDevice
         // Private attributes
         int _cs_pin;
         spi_device_handle_t _spi_handle;        // identifier for each SPI device
+
+        // Setup functions
+        esp_err_t write_reg(uint8_t reg_address, uint8_t data);
+        esp_err_t read_reg(uint8_t reg_address, uint8_t *receive);
+        esp_err_t enable_SFLP();
 
         // Registers
         struct Regs {
@@ -56,6 +65,9 @@ class IMU : public SPIDevice
             static constexpr uint8_t CTRL1_OIS           = 0x70; // 
             static constexpr uint8_t CTRL2_OIS           = 0x71; // 
             static constexpr uint8_t CTRL3_OIS           = 0x72; // 
+
+            // Embedded Functions Registers
+            static constexpr uint8_t EMB_FUNC_REG_ACCESS = 0x01; //  
         };
 };
 

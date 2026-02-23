@@ -23,7 +23,7 @@ class IMU : public SPIDevice
         // Public attributes
         IMU(int cs_pin);
         esp_err_t begin(spi_host_device_t spi_bus) override;
-        esp_err_t IMU::update(Quaternion &q);
+        // esp_err_t update(Quaternion &q);
         
     private:
         // Private attributes

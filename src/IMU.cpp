@@ -36,6 +36,7 @@ esp_err_t IMU::enable_SFLP()
     // 1. point to embedded functions memory bank
     // 2. enable SFLP game vector or whatever
     // 3. point back to default memory bank so we can access the FIFO
+    return ESP_OK;
 }
 
 esp_err_t IMU::begin(spi_host_device_t spi_host)
@@ -57,19 +58,16 @@ esp_err_t IMU::begin(spi_host_device_t spi_host)
         return ret;
     }
 
-    // Prepare WHO_AM_I request
-    uint8_t transmit = Regs::WHO_AM_I | Regs::READ_BIT;
-    uint8_t receive = 0;
+    uint8_t transmit[2] = { Regs::WHO_AM_I | Regs::READ_BIT, 0x00 };
+    uint8_t receive[2] = { 0, 0 };
 
     spi_transaction_t t = {};
-    t.length = 8;
-    t.rxlength = 8;
-    t.tx_buffer = &transmit;
-    t.rx_buffer = &receive;
+    t.length = 16;                  // Total transaction length (16 bits)
+    t.tx_buffer = transmit;
+    t.rx_buffer = receive;
 
-    // Perform SPI msg transaction
     ret = spi_device_transmit(_spi_handle, &t);
-    if (ret != ESP_OK) {
+    if (ret == ESP_OK) {
         ESP_LOGE(TAG, "IMU successfully transmitted initial message!");
     }
     else {
@@ -77,15 +75,13 @@ esp_err_t IMU::begin(spi_host_device_t spi_host)
         return ret;
     }
 
-    // Check if the right message was received
-    if (receive == 0x70) {
-        ESP_LOGE(TAG, "LSM6DSV16X detected! ID: 0x%02X", receive);
+    if (receive[1] == 0x70) { 
+        ESP_LOGI(TAG, "LSM6DSV16X detected! ID: 0x%02X", receive[1]);
     }
     else {
-        ESP_LOGE(TAG, "Device mismatch! Expected 0x70, got 0x%02X", receive);
+        ESP_LOGE(TAG, "Device mismatch! Expected 0x70, got 0x%02X", receive[1]);
         return ESP_ERR_NOT_FOUND;
     }
-
     return ESP_OK;
 }
 

@@ -47,17 +47,15 @@ extern "C" void app_main(void)
         printf("Gimbal Setup FAILED: %s (0x%X)\n", esp_err_to_name(err), err);
         
         // Safety: Don't start the PID loop if the IMU or Encoders are offline
-        abort();
+        // abort();
     }
     else {
-        
+        printf("%d\n", err);
     }
     
     // Initialise Gimbal
-    while (true) {
-        printf("Hi\n");
-        vTaskDelay(pdMS_TO_TICKS(500));
-    }
-    
-
+    // while (true) {
+    //     printf("Hi\n");
+    //     vTaskDelay(pdMS_TO_TICKS(500));
+    // }
 }

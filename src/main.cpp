@@ -54,8 +54,8 @@ extern "C" void app_main(void)
     }
     
     // Initialise Gimbal
-    // while (true) {
-    //     printf("Hi\n");
-    //     vTaskDelay(pdMS_TO_TICKS(500));
-    // }
+    while (true) {
+        
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
 }

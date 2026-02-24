@@ -14,12 +14,9 @@ Gimbal::Gimbal(SPIBus* spi_bus, IMU* imu, Encoder* yaw, Encoder* pitch, Encoder*
 
 esp_err_t Gimbal::setup() 
 {
+    // Initial delay of 1s to startup
     vTaskDelay(pdMS_TO_TICKS(1000));
-    printf("\n=== System Booting ===\n");
-    
-    printf("gimbal sequence\n");
-    ESP_LOGI(TAG, "Starting Gimbal setup sequence...\n");
-    // Check device status 
+    printf("\n\n======== System Booting ========\n");
 
     // Initialise SPIBus
     if (_spi_bus->initialise() != ESP_OK) {

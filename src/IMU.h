@@ -23,7 +23,7 @@ class IMU : public SPIDevice
         // Public attributes
         IMU(int cs_pin);
         esp_err_t begin(spi_host_device_t spi_bus) override;
-        // esp_err_t update(Quaternion &q);
+        esp_err_t update(Quaternion &q);
         
     private:
         // Private attributes
@@ -32,7 +32,8 @@ class IMU : public SPIDevice
 
         // Setup functions
         esp_err_t write_reg(uint8_t reg_address, uint8_t data);
-        esp_err_t read_reg(uint8_t reg_address, uint8_t *receive);
+        esp_err_t write_reg(uint8_t reg_address, uint8_t *data, size_t len);
+        esp_err_t read_reg(uint8_t reg_address, uint8_t *receive, size_t len = 1);
         esp_err_t enable_SFLP();
 
         // Registers
@@ -60,6 +61,9 @@ class IMU : public SPIDevice
             static constexpr uint8_t OUTZ_H_A_OIS           = 0x2D; // 
 
             // Control Registers
+            static constexpr uint8_t FIFO_CTRL4             = 0x0A;
+            static constexpr uint8_t CTRL1                  = 0x10;
+            static constexpr uint8_t CTRL2                  = 0x11;
             static constexpr uint8_t HANDSHAKE_CTRL         = 0x6E; // 
             static constexpr uint8_t INT_OIS                = 0x6F; // 
             static constexpr uint8_t CTRL1_OIS              = 0x70; // 
@@ -69,6 +73,10 @@ class IMU : public SPIDevice
             // Embedded Functions Registers
             static constexpr uint8_t FUNC_CFG_ACCESS        = 0x01; // used to enable the embedded functions register
             static constexpr uint8_t EMB_FUNC_EN_A          = 0x04;
+            static constexpr uint8_t EMB_FUNC_FIFO_EN_A     = 0x44; // used to enable batching of SFLP to FIFO
+            static constexpr uint8_t SFLP_ODR               = 0x5E; // used to set quaternion fifo batching rate
+            
+
 
             // Quaternion Output Registers
             static constexpr uint8_t FIFO_DATA_OUT_TAG      = 0x78; // returns 0x13 if SFLP game vector is enabled

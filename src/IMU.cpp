@@ -4,34 +4,63 @@ static const char* TAG = "IMU";
 
 IMU::IMU(int cs_pin) : _cs_pin(cs_pin), _spi_handle(nullptr) {}
 
-esp_err_t IMU::write_reg(uint8_t reg_address, uint8_t data)
-{
-    uint8_t tx_data[2] = {reg_address, data};
-    
-    spi_transaction_t t = {};
-    t.length = 16;
-    t.tx_buffer = tx_data;
-    t.rx_buffer = nullptr;      // no need to receive data for writing
+// --- The Single Byte Function ---
+esp_err_t IMU::write_reg(uint8_t reg_address, uint8_t data) {
+    // This simply packages the single byte and hands it to the burst function
+    return write_reg(reg_address, &data, 1);
+}
 
+// --- The Multi-Byte Burst Function ---
+esp_err_t IMU::write_reg(uint8_t reg_address, uint8_t *data, size_t len) {
+    const size_t MAX_BUF_SIZE = 32; 
+    if (len + 1 > MAX_BUF_SIZE) return ESP_ERR_NO_MEM; 
+
+    uint8_t tx_buf[MAX_BUF_SIZE] = {0};
+
+    // 1. First byte: WRITE bit (0) + 7-bit Address
+    tx_buf[0] = reg_address & 0x7F;
+
+    // 2. Copy the user's data array
+    memcpy(&tx_buf[1], data, len);
+
+    // 3. Configure the transaction
+    spi_transaction_t t = {};
+    t.length = 8 * (len + 1);     
+    t.tx_buffer = tx_buf;
+    t.rx_buffer = nullptr;        
+
+    // 4. Execute the transfer
     return spi_device_transmit(_spi_handle, &t);
 }
 
-esp_err_t IMU::read_reg(uint8_t reg_address, uint8_t *receive)
-{
-    // tx_data: register address sent to the IMU
-    // rx_data: buffer for data to be received back from the IMU
-    uint8_t tx_data[2] = {(uint8_t)(reg_address | Regs::READ_BIT), 0x00};
-    uint8_t rx_data[2] = {0, 0};
+esp_err_t IMU::read_reg(uint8_t reg_address, uint8_t *receive, size_t len) {
+    // 1. Create fast local buffers for Full Duplex transmission.
+    // 32 bytes is plenty for a 7-byte quaternion or a 14-byte raw sensor burst.
+    const size_t MAX_BUF_SIZE = 32; 
+    if (len + 1 > MAX_BUF_SIZE) return ESP_ERR_NO_MEM; // Guard rail
 
+    // Initialize all array elements to 0x00 (These become our 'dummy' bytes)
+    uint8_t tx_buf[MAX_BUF_SIZE] = {0}; 
+    uint8_t rx_buf[MAX_BUF_SIZE] = {0};
+
+    // 2. Set the first byte: READ bit (1) + 7-bit Address
+    tx_buf[0] = reg_address | 0x80;
+
+    // 3. Configure the transaction
     spi_transaction_t t = {};
-    t.length = 16;
-    t.tx_buffer = tx_data;
-    t.rx_buffer = rx_data;              // pass by pointer directly edits 
+    t.length = 8 * (len + 1);     // Total bits: Address byte + Data bytes
+    t.rxlength = 8 * (len + 1);   // Must exactly match t.length in Full Duplex
+    t.tx_buffer = tx_buf;
+    t.rx_buffer = rx_buf;
 
+    // 4. Execute the transfer
     esp_err_t ret = spi_device_transmit(_spi_handle, &t);
 
     if (ret == ESP_OK) {
-        *receive = rx_data[1];
+        // 5. Extract the valid data.
+        // rx_buf[0] contains garbage received while sending the address.
+        // The real data starts at rx_buf[1], so we copy it to the user's pointer.
+        memcpy(receive, &rx_buf[1], len);
     }
 
     return ret;
@@ -40,7 +69,28 @@ esp_err_t IMU::read_reg(uint8_t reg_address, uint8_t *receive)
 esp_err_t IMU::enable_SFLP()
 {
     esp_err_t ret;
-    // 1. Point to embedded functions memory bank
+
+    // 1. Enable accelerometer register at 480Hz
+    ret = write_reg(Regs::CTRL1, 0b00001000);
+    if (ret == ESP_OK) {
+        ESP_LOGE(TAG, "Set accelerometer data rate 480Hz!");
+    }
+    else {
+        ESP_LOGE(TAG, "Failed to set accelerometer data rate!");
+        return ret;
+    }
+
+    // 2. Enable gyroscope register at 480Hz
+    ret = write_reg(Regs::CTRL2, 0b00001000);
+    if (ret == ESP_OK) {
+        ESP_LOGE(TAG, "Set gyroscope data rate 480Hz!");
+    }
+    else {
+        ESP_LOGE(TAG, "Failed to set gyroscope data rate!");
+        return ret;
+    }
+
+    // 3. Point to embedded functions memory bank
     ret = write_reg(Regs::FUNC_CFG_ACCESS, 0b10000000);
     if (ret == ESP_OK) {
         ESP_LOGE(TAG, "Successfully enabled embedded functions registers!");
@@ -50,7 +100,7 @@ esp_err_t IMU::enable_SFLP()
         return ret;
     }
 
-    // 2. Enable SFLP game vector or whatever
+    // 4. Enable SFLP game vector
     ret = write_reg(Regs::EMB_FUNC_EN_A, 0b00000010);
     if (ret == ESP_OK) {
         ESP_LOGE(TAG, "Successfully enabled SFLP game vector!");
@@ -60,7 +110,46 @@ esp_err_t IMU::enable_SFLP()
         return ret;
     }
 
-    // 3. Point back to default memory bank so we can access the FIFO registers
+    // 5. Configure SFLP data rate to 480Hz
+    ret = write_reg(Regs::SFLP_ODR, 0b01101011);
+    if (ret == ESP_OK) {
+        ESP_LOGE(TAG, "Successfully set SFLP data rate to 480Hz!");
+    }
+    else {
+        ESP_LOGE(TAG, "Failed to enable SFLP game vector!");
+        return ret;
+    }
+
+    // 6. Enable batching of SFLP data to the FIFO
+    ret = write_reg(Regs::EMB_FUNC_FIFO_EN_A, 0b00000010);
+    if (ret == ESP_OK) {
+        ESP_LOGE(TAG, "Successfully enabled batching of SFLP to the FIFO!");
+    }
+    else {
+        ESP_LOGE(TAG, "Failed to enable batching of SFLP to the FIFO!");
+        return ret;
+    }
+
+    // check the SFLP game vector register to see if the value was changed
+    // uint8_t sflp_value;
+    // ret = read_reg(Regs::EMB_FUNC_EN_A, &sflp_value);
+    // if (ret == ESP_OK) {
+    //     ESP_LOGE(TAG, "Successfully read the SFLP register!");
+
+    //     if (sflp_value == 0b00000010) {
+    //         ESP_LOGI(TAG, "SFLP enabled! Register: 0x%02X", sflp_value);
+    //     }
+    //     else {
+    //         ESP_LOGE(TAG, "SFLP not enabled! Register: 0x%02X", sflp_value);
+    //         return ESP_ERR_NOT_FOUND;
+    //     }
+    // }
+    // else {
+    //     ESP_LOGE(TAG, "Failed to disable embedded functions registers!");
+    //     return ret;
+    // }
+
+    // 7. Point back to default memory bank so we can access the FIFO registers
     ret = write_reg(Regs::FUNC_CFG_ACCESS, 0b00000000);
     if (ret == ESP_OK) {
         ESP_LOGE(TAG, "Successfully disabled embedded functions registers!");
@@ -70,24 +159,35 @@ esp_err_t IMU::enable_SFLP()
         return ret;
     }
 
+    // 8. Enable continuous mode for the FIFO
+    ret = write_reg(Regs::FIFO_CTRL4, 0b00000110);
+    if (ret == ESP_OK) {
+        ESP_LOGE(TAG, "Successfully enabled continuous mode for the FIFO!");
+    }
+    else {
+        ESP_LOGE(TAG, "Failed to enable continuous mode for the FIFO!");
+        return ret;
+    }
+
     // Check FIFO registers for SFLP game rotation vector (returns 0x13)
     uint8_t FIFO_tag;
     ret = read_reg(Regs::FIFO_DATA_OUT_TAG, &FIFO_tag);
 
     if (ret == ESP_OK) {
         ESP_LOGE(TAG, "Successfully requested the FIFO tag!");
+        uint8_t sensor_tag = (FIFO_tag & 0b11111000) >> 3;
+
+        if (sensor_tag == 0x13) {
+            ESP_LOGI(TAG, "FIFO tag detected! ID: 0x%02X", sensor_tag);
+        }
+        else {
+            ESP_LOGE(TAG, "FIFO tag mismatch! Expected 0x13, got 0x%02X", sensor_tag);
+            return ESP_ERR_NOT_FOUND;
+        }
     }
     else {
         ESP_LOGE(TAG, "Failed to request the FIFO tag!");
         return ret;
-    }
-
-    if (FIFO_tag == 0x13) {
-        ESP_LOGI(TAG, "FIFO tag detected! ID: 0x%02X", FIFO_tag);
-    }
-    else {
-        ESP_LOGE(TAG, "FIFO tag mismatch! Expected 0x13, got 0x%02X", FIFO_tag);
-        return ESP_ERR_NOT_FOUND;
     }
 
     return ESP_OK;
@@ -148,3 +248,18 @@ esp_err_t IMU::begin(spi_host_device_t spi_host)
     return ESP_OK;
 }
 
+esp_err_t IMU::update(Quaternion &q)
+{
+    // Read FIFO registers for quaternion data
+    uint8_t x_h;
+    esp_err_t ret = read_reg(Regs::FIFO_DATA_OUT_X_H, &x_h);
+    if (ret == ESP_OK) {
+        ESP_LOGE(TAG, "Game vector x_h: %d", x_h);
+    }
+    else {
+        ESP_LOGE(TAG, "Failed to setup SFLP game vector!");
+        return ret;
+    }
+
+    return ESP_OK;
+}

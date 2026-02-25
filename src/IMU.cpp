@@ -130,25 +130,6 @@ esp_err_t IMU::enable_SFLP()
         return ret;
     }
 
-    // check the SFLP game vector register to see if the value was changed
-    // uint8_t sflp_value;
-    // ret = read_reg(Regs::EMB_FUNC_EN_A, &sflp_value);
-    // if (ret == ESP_OK) {
-    //     ESP_LOGE(TAG, "Successfully read the SFLP register!");
-
-    //     if (sflp_value == 0b00000010) {
-    //         ESP_LOGI(TAG, "SFLP enabled! Register: 0x%02X", sflp_value);
-    //     }
-    //     else {
-    //         ESP_LOGE(TAG, "SFLP not enabled! Register: 0x%02X", sflp_value);
-    //         return ESP_ERR_NOT_FOUND;
-    //     }
-    // }
-    // else {
-    //     ESP_LOGE(TAG, "Failed to disable embedded functions registers!");
-    //     return ret;
-    // }
-
     // 7. Point back to default memory bank so we can access the FIFO registers
     ret = write_reg(Regs::FUNC_CFG_ACCESS, 0b00000000);
     if (ret == ESP_OK) {
@@ -263,3 +244,23 @@ esp_err_t IMU::update(Quaternion &q)
 
     return ESP_OK;
 }
+
+
+    // check the SFLP game vector register to see if the value was changed
+    // uint8_t sflp_value;
+    // ret = read_reg(Regs::EMB_FUNC_EN_A, &sflp_value);
+    // if (ret == ESP_OK) {
+    //     ESP_LOGE(TAG, "Successfully read the SFLP register!");
+
+    //     if (sflp_value == 0b00000010) {
+    //         ESP_LOGI(TAG, "SFLP enabled! Register: 0x%02X", sflp_value);
+    //     }
+    //     else {
+    //         ESP_LOGE(TAG, "SFLP not enabled! Register: 0x%02X", sflp_value);
+    //         return ESP_ERR_NOT_FOUND;
+    //     }
+    // }
+    // else {
+    //     ESP_LOGE(TAG, "Failed to disable embedded functions registers!");
+    //     return ret;
+    // }

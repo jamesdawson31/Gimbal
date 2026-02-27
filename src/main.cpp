@@ -55,7 +55,7 @@ extern "C" void app_main(void)
     
     // Initialise Gimbal
     while (true) {
-        
+        gimbal.update();
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 }

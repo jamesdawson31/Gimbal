@@ -2,6 +2,23 @@
 
 static const char* TAG = "IMU";
 
+// Helper function to decode IEEE 754 Half-Precision Float
+float half_to_float(uint16_t h) {
+    uint32_t sign = (h >> 15) & 0x00000001;
+    uint32_t exp  = (h >> 10) & 0x0000001F;
+    uint32_t frac =  h        & 0x000003FF;
+
+    // Handle subnormal numbers as 0 for IMU gimbal purposes
+    if (exp == 0) return 0.0f; 
+
+    // Convert to 32-bit float: Re-bias the exponent (+112) and shift fraction
+    uint32_t f_bits = (sign << 31) | ((exp + 112) << 23) | (frac << 13);
+    
+    float f;
+    memcpy(&f, &f_bits, 4); // Safe memory copy to float
+    return f;
+}
+
 IMU::IMU(int cs_pin) : _cs_pin(cs_pin), _spi_handle(nullptr) {}
 
 // --- The Single Byte Function ---
@@ -229,18 +246,40 @@ esp_err_t IMU::begin(spi_host_device_t spi_host)
     return ESP_OK;
 }
 
-esp_err_t IMU::update(Quaternion &q)
+esp_err_t IMU::get_quaternion(Quaternion *q)
 {
     // Read FIFO registers for quaternion data
-    uint8_t x_h;
-    esp_err_t ret = read_reg(Regs::FIFO_DATA_OUT_X_H, &x_h);
-    if (ret == ESP_OK) {
-        ESP_LOGE(TAG, "Game vector x_h: %d", x_h);
-    }
-    else {
-        ESP_LOGE(TAG, "Failed to setup SFLP game vector!");
+    uint8_t raw_quaternion[7];
+    esp_err_t ret = read_reg(Regs::FIFO_DATA_OUT_TAG, raw_quaternion, sizeof(raw_quaternion));
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "sensor read failed!");
         return ret;
     }
+    
+    uint8_t sensor_tag = (raw_quaternion[0] & 0b11111000) >> 3;
+
+    // If the SFLP tag isn't for a quaternion, then return an error
+    if (sensor_tag != 0x13) {
+        ESP_LOGE(TAG, "Wrong sensor tag detected! Detected 0x%x when it should be 0x13!", sensor_tag);
+        return ESP_FAIL;
+    }
+
+// 1. Reconstruct the 16-bit words (Little Endian)
+    uint16_t raw_x = (raw_quaternion[2] << 8) | raw_quaternion[1];
+    uint16_t raw_y = (raw_quaternion[4] << 8) | raw_quaternion[3];
+    uint16_t raw_z = (raw_quaternion[6] << 8) | raw_quaternion[5];
+
+    // 2. Decode the half-precision floats
+    q->x = half_to_float(raw_x);
+    q->y = half_to_float(raw_y);
+    q->z = half_to_float(raw_z);
+
+    // 3. Calculate the W component
+    float mag_xyz_sq = q->x * q->x + q->y * q->y + q->z * q->z;
+    q->w = sqrtf(fmaxf(0.0f, 1.0f - mag_xyz_sq));
+
+    // Optional: Print the real values to check your success!
+    ESP_LOGI(TAG, "Quaternion: w:%.3f x:%.3f y:%.3f z:%.3f", q->w, q->x, q->y, q->z);
 
     return ESP_OK;
 }

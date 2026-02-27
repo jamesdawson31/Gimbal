@@ -3,6 +3,7 @@
 
 #include "driver/spi_master.h"
 #include "SPIDevice.h"
+#include <math.h>
 
 // bit 0: READ bit. The value is 1.
 // bit 1-7: address AD(6:0). This is the address field of the indexed register.
@@ -17,13 +18,15 @@ struct Quaternion {
     float x, y, z, w;
 };
 
+float half_to_float(uint16_t h);
+
 class IMU : public SPIDevice 
 {
     public:
         // Public attributes
         IMU(int cs_pin);
         esp_err_t begin(spi_host_device_t spi_bus) override;
-        esp_err_t update(Quaternion &q);
+        esp_err_t get_quaternion(Quaternion *q);
         
     private:
         // Private attributes

@@ -13,7 +13,7 @@ class Gimbal
         Gimbal(SPIBus* spi_bus, IMU* imu, Encoder* yaw, Encoder* pitch, Encoder* roll);
 
         esp_err_t setup();
-        // void Gimbal::update();      // change datatype later
+        esp_err_t update();      // change datatype later
 
     private:
         // Pointer to the SPI bus
@@ -29,6 +29,9 @@ class Gimbal
         Encoder* _roll_enc;
         // BMS* _bms;
         // ControlInterface* _control_interface;        // for later implementation of buttons, screen, etc.
+
+        // Quaternion
+        Quaternion _q;
 };
 
 #endif // GIMBAL_H

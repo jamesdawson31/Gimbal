@@ -55,8 +55,12 @@ esp_err_t Gimbal::setup()
     return ESP_OK;          // placeholder!
 }
 
-// void Gimbal::update()
-// {
-//     // Get sensor updates and run control loop here
-//     // Implement control 
-// }
+esp_err_t Gimbal::update()
+{
+    // Get a quaternion from the IMU
+    esp_err_t ret;
+    ret = _imu->get_quaternion(&_q);
+    
+
+    return ESP_OK;
+}

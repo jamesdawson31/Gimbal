@@ -5,6 +5,7 @@
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <Arduino.h>
 
 // Custom system libraries
 #include "Gimbal.h"
@@ -39,6 +40,8 @@ extern "C" void app_main(void)
 {
     // This tells the C++ compiler: 
     // "Don't mangle this name. Keep it exactly as it is (C-style)."
+
+    initArduino();
 
     // 2. Call setup and capture the result
     esp_err_t err = gimbal.setup();

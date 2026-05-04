@@ -1,5 +1,7 @@
 #include "IMU.h"
 
+#include <cstring>
+
 static const char* TAG = "IMU";
 
 // Helper function to decode IEEE 754 Half-Precision Float

@@ -1,3 +1,6 @@
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
 #include "Gimbal.h"
 
 static const char* TAG = "GIMBAL";

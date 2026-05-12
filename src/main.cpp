@@ -1,10 +1,13 @@
 // Standard libraries
 #include <stdlib.h>
+#include <stdio.h>
 
 // ESP32 libraries
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+
+// Arduino libraries
 #include <Arduino.h>
 
 // Custom system libraries

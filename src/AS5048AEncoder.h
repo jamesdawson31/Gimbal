@@ -4,10 +4,10 @@
 #include "SPIDevice.h"
 #include "esp_log.h"
 
-class Encoder : public SPIDevice 
+class AS5048AEncoder : public SPIDevice 
 {
     public:
-        Encoder(int cs_pin);
+        AS5048AEncoder(int cs_pin);
 
         esp_err_t begin(spi_host_device_t spi_host) override;
 

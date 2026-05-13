@@ -5,7 +5,7 @@
 
 static const char* TAG = "GIMBAL";
 
-Gimbal::Gimbal(SPIBus* spi_bus, IMU* imu, Encoder* yaw, Encoder* pitch, Encoder* roll) 
+Gimbal::Gimbal(SPIBus* spi_bus, LSM6DSV16X_IMU* imu, AS5048AEncoder* yaw, AS5048AEncoder* pitch, AS5048AEncoder* roll) 
     : _spi_bus(spi_bus), _imu(imu), _yaw_enc(yaw), _pitch_enc(pitch), _roll_enc(roll) 
 {
     // Fill the components array

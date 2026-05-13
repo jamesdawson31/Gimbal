@@ -2,11 +2,11 @@
 #include "freertos/task.h"
 
 #include "SPIDevice.h"
-#include "Encoder.h"
+#include "AS5048AEncoder.h"
 
-Encoder::Encoder(int cs_pin) : _cs_pin(cs_pin) {}
+AS5048AEncoder::AS5048AEncoder(int cs_pin) : _cs_pin(cs_pin) {}
 
-esp_err_t Encoder::begin(spi_host_device_t host) {
+esp_err_t AS5048AEncoder::begin(spi_host_device_t host) {
     spi_device_interface_config_t devcfg = {};
     devcfg.clock_speed_hz = 10 * 1000 * 1000; // 10MHz max [cite: 355]
     devcfg.mode = 1;                         // Correct mode for AS5048A 

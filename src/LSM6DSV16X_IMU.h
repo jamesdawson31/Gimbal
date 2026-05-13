@@ -1,5 +1,5 @@
-#ifndef IMU_H
-#define IMU_H
+#ifndef LSM6DSV16X_IMU_H
+#define LSM6DSV16X_IMU_H
 
 #include "driver/spi_master.h"
 #include "SPIDevice.h"
@@ -20,11 +20,11 @@ struct Quaternion {
 
 float half_to_float(uint16_t h);
 
-class IMU : public SPIDevice 
+class LSM6DSV16X_IMU : public SPIDevice 
 {
     public:
         // Public attributes
-        IMU(int cs_pin);
+        LSM6DSV16X_IMU(int cs_pin);
         esp_err_t begin(spi_host_device_t spi_bus) override;
         esp_err_t get_quaternion(Quaternion *q);
         
@@ -92,4 +92,4 @@ class IMU : public SPIDevice
         };
 };
 
-#endif // IMU_H
+#endif // LSM6DSV16X_IMU_H

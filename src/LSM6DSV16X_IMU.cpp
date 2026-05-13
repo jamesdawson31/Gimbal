@@ -1,8 +1,8 @@
-#include "IMU.h"
+#include "LSM6DSV16X_IMU.h"
 
 #include <cstring>
 
-static const char* TAG = "IMU";
+static const char* TAG = "LSM6DSV16X_IMU";
 
 // Helper function to decode IEEE 754 Half-Precision Float
 float half_to_float(uint16_t h) {
@@ -21,16 +21,16 @@ float half_to_float(uint16_t h) {
     return f;
 }
 
-IMU::IMU(int cs_pin) : _cs_pin(cs_pin), _spi_handle(nullptr) {}
+LSM6DSV16X_IMU::LSM6DSV16X_IMU(int cs_pin) : _cs_pin(cs_pin), _spi_handle(nullptr) {}
 
 // --- The Single Byte Function ---
-esp_err_t IMU::write_reg(uint8_t reg_address, uint8_t data) {
+esp_err_t LSM6DSV16X_IMU::write_reg(uint8_t reg_address, uint8_t data) {
     // This simply packages the single byte and hands it to the burst function
     return write_reg(reg_address, &data, 1);
 }
 
 // --- The Multi-Byte Burst Function ---
-esp_err_t IMU::write_reg(uint8_t reg_address, uint8_t *data, size_t len) {
+esp_err_t LSM6DSV16X_IMU::write_reg(uint8_t reg_address, uint8_t *data, size_t len) {
     const size_t MAX_BUF_SIZE = 32; 
     if (len + 1 > MAX_BUF_SIZE) return ESP_ERR_NO_MEM; 
 
@@ -52,7 +52,7 @@ esp_err_t IMU::write_reg(uint8_t reg_address, uint8_t *data, size_t len) {
     return spi_device_transmit(_spi_handle, &t);
 }
 
-esp_err_t IMU::read_reg(uint8_t reg_address, uint8_t *receive, size_t len) {
+esp_err_t LSM6DSV16X_IMU::read_reg(uint8_t reg_address, uint8_t *receive, size_t len) {
     // 1. Create fast local buffers for Full Duplex transmission.
     // 32 bytes is plenty for a 7-byte quaternion or a 14-byte raw sensor burst.
     const size_t MAX_BUF_SIZE = 32; 
@@ -85,7 +85,7 @@ esp_err_t IMU::read_reg(uint8_t reg_address, uint8_t *receive, size_t len) {
     return ret;
 }
 
-esp_err_t IMU::enable_SFLP()
+esp_err_t LSM6DSV16X_IMU::enable_SFLP()
 {
     esp_err_t ret;
 
@@ -193,7 +193,7 @@ esp_err_t IMU::enable_SFLP()
     return ESP_OK;
 }
 
-esp_err_t IMU::begin(spi_host_device_t spi_host)
+esp_err_t LSM6DSV16X_IMU::begin(spi_host_device_t spi_host)
 {
     printf("---- Starting IMU setup sequence ----\n");
     // Configure device (based on ESP32 SPI library)
@@ -248,7 +248,7 @@ esp_err_t IMU::begin(spi_host_device_t spi_host)
     return ESP_OK;
 }
 
-esp_err_t IMU::get_quaternion(Quaternion *q)
+esp_err_t LSM6DSV16X_IMU::get_quaternion(Quaternion *q)
 {
     // Read FIFO registers for quaternion data
     uint8_t raw_quaternion[7];

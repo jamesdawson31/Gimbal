@@ -9,12 +9,13 @@
 
 // Arduino libraries
 #include <Arduino.h>
+#include <SimpleFOC.h>
 
 // Custom system libraries
 #include "Gimbal.h"
 #include "Motor.h"
-#include "Encoder.h"
-#include "IMU.h"
+#include "AS5048AEncoder.h"
+#include "LSM6DSV16X_IMU.h"
 #include "SPIBus.h"
 
 // Pin definitions
@@ -30,10 +31,10 @@
 
 // Initialisation of classes
 SPIBus  spi_bus_2(SPI2_HOST, PIN_SPI_MOSI, PIN_SPI_MISO, PIN_SPI_SCLK);
-IMU     imu(PIN_SPI_IMU_CS);
-Encoder yaw_enc(PIN_SPI_ENC_YAW_CS);
-Encoder pitch_enc(PIN_SPI_ENC_PITCH_CS);
-Encoder roll_enc(PIN_SPI_ENC_ROLL_CS);
+LSM6DSV16X_IMU imu(PIN_SPI_IMU_CS);
+AS5048AEncoder yaw_enc(PIN_SPI_ENC_YAW_CS);
+AS5048AEncoder pitch_enc(PIN_SPI_ENC_PITCH_CS);
+AS5048AEncoder roll_enc(PIN_SPI_ENC_ROLL_CS);
 Gimbal gimbal(&spi_bus_2, &imu, &yaw_enc, &pitch_enc, &roll_enc);
 
 // -------- CAN OPTIMISE INTEGER SIZES LATER!!! --------

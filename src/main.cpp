@@ -26,6 +26,15 @@
 #define PIN_SPI_ENC_YAW_CS          9
 #define PIN_SPI_ENC_PITCH_CS        8
 #define PIN_SPI_ENC_ROLL_CS         7
+#define PIN_MOTOR_YAW_PWM_1         10
+#define PIN_MOTOR_YAW_PWM_2         11
+#define PIN_MOTOR_YAW_PWM_3         12
+#define PIN_MOTOR_PITCH_PWM_1       13
+#define PIN_MOTOR_PITCH_PWM_2       14
+#define PIN_MOTOR_PITCH_PWM_3       15
+#define PIN_MOTOR_ROLL_PWM_1        16
+#define PIN_MOTOR_ROLL_PWM_2        17
+#define PIN_MOTOR_ROLL_PWM_3        18
 // Add BMS and power management stuff later
 // #define 
 
@@ -35,6 +44,9 @@ LSM6DSV16X_IMU imu(PIN_SPI_IMU_CS);
 AS5048AEncoder yaw_enc(PIN_SPI_ENC_YAW_CS);
 AS5048AEncoder pitch_enc(PIN_SPI_ENC_PITCH_CS);
 AS5048AEncoder roll_enc(PIN_SPI_ENC_ROLL_CS);
+Motor yaw_motor(PIN_MOTOR_YAW_PWM_1, PIN_MOTOR_YAW_PWM_2, PIN_MOTOR_YAW_PWM_3);
+Motor pitch_motor(PIN_MOTOR_PITCH_PWM_1, PIN_MOTOR_PITCH_PWM_2, PIN_MOTOR_PITCH_PWM_3);
+Motor roll_motor(PIN_MOTOR_ROLL_PWM_1, PIN_MOTOR_ROLL_PWM_2, PIN_MOTOR_ROLL_PWM_3);
 Gimbal gimbal(&spi_bus_2, &imu, &yaw_enc, &pitch_enc, &roll_enc);
 
 // -------- CAN OPTIMISE INTEGER SIZES LATER!!! --------

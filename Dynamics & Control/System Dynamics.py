@@ -68,6 +68,14 @@ theta_m_op = 0
 uq_op = ((2*Rp*b/(3*p*lam)) + p*lam)*theta_m_dot_op
 ud_op = -p*Lp*theta_m_dot_op*iq_op
 
+print("\nOperating Point Values:")
+print(f"theta_m_dot_op = {float(theta_m_dot_op):.6f}")
+print(f"iq_op          = {float(iq_op):.6f}")
+print(f"id_op          = {float(id_op):.6f}")
+print(f"theta_m_op     = {float(theta_m_op):.6f}")
+print(f"uq_op          = {float(uq_op):.6f}")
+print(f"ud_op          = {float(ud_op):.6f}")
+
 # Evaluate Jacobians for linearised state-space matrices A and B
 A = Jx.subs({
     id: id_op,
@@ -90,3 +98,19 @@ B = Ju.subs({
 sp.pprint(A)
 sp.pprint(B)
 
+# Convert to numpy arrays
+A = np.array(A).astype(np.float64)
+B = np.array(B).astype(np.float64)
+
+print(A)
+print(B)
+
+Ctrb = ct.ctrb(A, B)
+rank = np.linalg.matrix_rank(Ctrb)
+n_states = A.shape[0]
+
+print(f"Rank: {rank}, n_states: {n_states}")
+if rank == n_states:
+    print("\nSystem is controllable!")
+else:
+    print("\nSystem is NOT controllable")

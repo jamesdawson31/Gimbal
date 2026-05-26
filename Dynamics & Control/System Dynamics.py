@@ -154,10 +154,11 @@ L = L.T
 print("\nKalman Filter Gain Matrix L:")
 print(L)
 
-# Check gain and phase margins
-controller = ct.ss(A - B@K - L@C, L, K, D)
-plant = ct.ss(A, B, C, D)
+def nonlinear_dynamics(x, t):
+    id, iq, theta_m_dot, theta_m = x
+    ud, uq = 0, 0
+    id_dot = -(Rp/Lp)*id + (1/Lp)*ud + p*theta_m_dot*iq
+    iq_dot = -(Rp/Lp)*iq - (p*lam/Lp)*theta_m_dot + (1/Lp)*uq - p*theta_m_dot*id
+    theta_m_2dot = (3*p*lam/(2*Js))*iq - (b/Js)*theta_m_dot - T_load/Js
+    return np.array([id_dot, iq_dot, theta_m_2dot, theta_m_dot])
 
-loop = controller * plant
-ct.bode(loop, dB=True)
-plt.show()

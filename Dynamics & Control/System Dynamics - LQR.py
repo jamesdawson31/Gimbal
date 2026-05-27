@@ -189,6 +189,7 @@ theta_m_dot_0 = 0#theta_m_dot_op
 theta_m_0 = 0
 
 x_0 = np.array([id_0, iq_0, theta_m_dot_0, theta_m_0])
+# x_0 = x_op
 
 # Control input
 u = np.array([ud_op, uq_op])

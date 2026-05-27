@@ -2,9 +2,16 @@ import numpy as np
 import control as ct 
 import matplotlib.pyplot as plt
 import sympy as sp
+from scipy.integrate import solve_ivp
 
 def rpm2radps(rpm):
     return np.pi/30 * rpm
+
+def LQR_input(x, x_op, u_op, K):
+    return u_op - K @ (x - x_op)
+
+def LQI_input(x, K, Ki, integral_error):
+    return - K @ x - Ki @ integral_error
 
 # Define the system parameters
 p = 11                              # Number of pole pairs
@@ -66,8 +73,10 @@ theta_m_dot_op = rpm2radps(60)
 iq_op = (2*b/(3*p*lam))*theta_m_dot_op
 id_op = 0
 theta_m_op = 0
+x_op = np.array([id_op, iq_op, theta_m_dot_op, theta_m_op])
 uq_op = ((2*Rp*b/(3*p*lam)) + p*lam)*theta_m_dot_op
 ud_op = -p*Lp*theta_m_dot_op*iq_op
+u_op = np.array([ud_op, uq_op])
 
 print("\nOperating Point Values:")
 print(f"theta_m_dot_op = {float(theta_m_dot_op):.6f}")
@@ -154,11 +163,180 @@ L = L.T
 print("\nKalman Filter Gain Matrix L:")
 print(L)
 
-def nonlinear_dynamics(x, t):
+
+## Simulate dynamics
+def nonlinear_dynamics(t, x, u_op, x_op, K):
+    # Unpack state variables
     id, iq, theta_m_dot, theta_m = x
-    ud, uq = 0, 0
+
+    # Compute control input using state feedback
+    # u = u_op - K @ (x - x_op)
+    u = LQR_input(x, x_op, u_op, K)
+    ud = u[0]
+    uq = u[1]
+
+    # Compute state derivatives
     id_dot = -(Rp/Lp)*id + (1/Lp)*ud + p*theta_m_dot*iq
     iq_dot = -(Rp/Lp)*iq - (p*lam/Lp)*theta_m_dot + (1/Lp)*uq - p*theta_m_dot*id
     theta_m_2dot = (3*p*lam/(2*Js))*iq - (b/Js)*theta_m_dot - T_load/Js
+
     return np.array([id_dot, iq_dot, theta_m_2dot, theta_m_dot])
 
+# Initial states
+id_0 = 0
+iq_0 = 0
+theta_m_dot_0 = 0#theta_m_dot_op
+theta_m_0 = 0
+
+x_0 = np.array([id_0, iq_0, theta_m_dot_0, theta_m_0])
+
+# Control input
+u = np.array([ud_op, uq_op])
+
+# Simulation time
+t_start = 0
+t_end = 0.5
+num_points = 1000
+t_eval = np.linspace(t_start, t_end, num_points)
+
+# Record other variables for visualisation
+ud_sim = np.zeros(num_points)
+uq_sim = np.zeros(num_points)
+
+# Run simulation
+sol = solve_ivp(
+    nonlinear_dynamics,
+    (t_start, t_end),
+    x_0,
+    args=(u_op, x_op, K),
+    t_eval=t_eval,
+    method='RK45'
+)
+
+# Unpack results
+t = sol.t
+id_sim = sol.y[0]
+iq_sim = sol.y[1]
+theta_m_dot_sim = sol.y[2]
+theta_m_sim = sol.y[3]
+
+## Convert back to the abc frame for visualisation
+# Define transformation matrices for Clarke and Park transforms
+def T_Clarke():
+    return (2/3) * np.array([
+        [1, -0.5, -0.5],
+        [0, np.sqrt(3)/2, -np.sqrt(3)/2]
+    ])
+
+def T_Clarke_inv():
+    return np.array([
+        [1, 0],
+        [-0.5,  np.sqrt(3)/2],
+        [-0.5, -np.sqrt(3)/2]
+    ])
+
+def T_Park(theta):
+    return np.array([
+        [np.cos(theta), np.sin(theta)],
+        [-np.sin(theta), np.cos(theta)]
+    ])
+
+def T_Park_inv(theta):
+    return np.array([
+        [np.cos(theta), -np.sin(theta)],
+        [np.sin(theta),  np.cos(theta)]
+    ])
+
+i_dq = np.column_stack((id_sim, iq_sim))
+i_abc = np.zeros((len(t), 3))
+u_abc = np.zeros((len(t), 3))
+
+for i in range(len(t)):
+    # Get current state
+    theta_m_i = theta_m_sim[i]
+
+    # Reconstruct ud and uq for visualisation
+    # u_sim = u_op - K @ (sol.y[:, i] - x_op)
+    u_sim = LQR_input(sol.y[:, i], x_op, u_op, K)
+    ud_sim[i] = u_sim[0]
+    uq_sim[i] = u_sim[1]
+
+    # Inverse Clarke and Park transforms to get abc currents
+    i_abc[i] = T_Clarke_inv() @ T_Park_inv(p*theta_m_i) @ np.array(i_dq[i])
+    u_abc[i] = T_Clarke_inv() @ T_Park_inv(p*theta_m_i) @ u_sim
+
+
+# Unpack phase currents and voltages
+ia = i_abc[:, 0]
+ib = i_abc[:, 1]
+ic = i_abc[:, 2]
+ua = u_abc[:, 0]
+ub = u_abc[:, 1]
+uc = u_abc[:, 2]
+
+
+## Plot results
+plt.figure(figsize=(10,8))
+
+# id
+plt.subplot(4,2,1)
+plt.plot(t, id_sim)
+plt.axhline(id_op, color='r', linestyle='--', label='id_op')
+plt.ylabel('id (A)')
+plt.grid()
+
+# iq
+plt.subplot(4,2,2)
+plt.plot(t, iq_sim)
+plt.axhline(iq_op, color='r', linestyle='--', label='iq_op')
+plt.ylabel('iq (A)')
+plt.grid()
+
+# theta_m_dot
+plt.subplot(4,2,3)
+plt.plot(t, theta_m_dot_sim)
+plt.axhline(theta_m_dot_op, color='r', linestyle='--', label='theta_m_dot_op')
+plt.ylabel('ωm (rad/s)')
+plt.grid()
+
+# theta_m
+plt.subplot(4,2,4)
+plt.plot(t, theta_m_sim)
+plt.ylabel('θm (rad)')
+plt.grid()
+
+# ud
+plt.subplot(4,2,5)
+plt.plot(t, ud_sim)
+plt.axhline(ud_op, color='r', linestyle='--', label='ud_op')
+plt.ylabel('ud (V)')
+plt.grid()
+
+# uq
+plt.subplot(4,2,6)
+plt.plot(t, uq_sim)
+plt.axhline(uq_op, color='r', linestyle='--', label='uq_op')
+plt.ylabel('uq (V)')
+plt.grid()
+
+# ia, ib, ic
+plt.subplot(4,2,7)
+plt.plot(t, ia, label='ia')
+plt.plot(t, ib, label='ib')
+plt.plot(t, ic, label='ic')
+plt.legend()
+plt.ylabel('Phase Current (A)')
+plt.grid()
+
+# ua, ub, uc
+plt.subplot(4,2,8)
+plt.plot(t, u_abc[:, 0], label='ua')
+plt.plot(t, u_abc[:, 1], label='ub')
+plt.plot(t, u_abc[:, 2], label='uc')
+plt.legend()
+plt.ylabel('Phase Voltage (V)')
+plt.xlabel('Time (s)')
+plt.grid()
+
+plt.tight_layout()
+plt.show()

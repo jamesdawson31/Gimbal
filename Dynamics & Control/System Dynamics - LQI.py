@@ -10,8 +10,15 @@ def rpm2radps(rpm):
 def LQR_input(x, x_op, u_op, K):
     return u_op - K @ (x - x_op)
 
-def LQI_input(x, K, Ki, integral_error):
-    return - K @ x - Ki @ integral_error
+def LQI_input(xa, Ka):
+    return - Ka @ xa
+
+def reference(t):
+    # Step reference of 60 rpm
+    if t < 0.1:
+        return 0
+    else:
+        return rpm2radps(60)
 
 # Define the system parameters
 p = 11                              # Number of pole pairs
@@ -126,21 +133,41 @@ if rank == n_states:
 else:
     print("\nSystem is NOT controllable")
 
-## LQR Controller Design
-# Define weighting matrices Q and R based on maximum expected values of states and inputs
+## Augmented system design for LQI controller
+# Ci to only regulate theta_m_dot
+Ci = np.array([[0, 0, 1, 0]])
+
+# Augmented A matrix (Aa = [[A, 0], [-Ci, 0]])
+Aa = np.block([
+    [A, np.zeros((4,1))],
+    [-Ci, 0]
+])
+
+# Augmented B matrix (Ba = [[B], [0]])
+Ba = np.vstack((B, np.zeros((1,2))))
+
+print("\nAugmented State-Space Matrices for LQI:")
+print("Aa:")
+print(Aa)
+print("Ba:")
+print(Ba)
+
+## LQI Controller Design
+# Define weighting matrices Qa and Ra based on maximum expected values of states and inputs
 id_max = 0.1
 iq_max = 5
 theta_m_dot_max = rpm2radps(2000)
 theta_m_max = np.inf
-Q = np.diag([1/id_max**2, 1/iq_max**2, 1/theta_m_dot_max**2, 1/theta_m_max**2])
+q_max = 10
+Qa = np.diag([1/id_max**2, 1/iq_max**2, 1/theta_m_dot_max**2, 1/theta_m_max**2, 1/q_max**2])
 ud_max = 12
 uq_max = 12
-R = np.diag([1/ud_max**2, 1/uq_max**2])
+Ra = np.diag([1/ud_max**2, 1/uq_max**2])
 
 # Compute LQR gain matrix K
-K, S, E = ct.lqr(A, B, Q, R)
-print("\nLQR Gain Matrix K:")
-print(K)
+Ka, S, E = ct.lqr(Aa, Ba, Qa, Ra)
+print("\nLQI Gain Matrix Ka:")
+print(Ka)
 
 ## Kalman Filter Design
 # Define measurement matrix C and D
@@ -165,13 +192,12 @@ print(L)
 
 
 ## Simulate dynamics
-def nonlinear_dynamics(t, x, u_op, x_op, K):
+def nonlinear_dynamics(t, x, Ka):
     # Unpack state variables
-    id, iq, theta_m_dot, theta_m = x
+    id, iq, theta_m_dot, theta_m, q = x
 
     # Compute control input using state feedback
-    # u = u_op - K @ (x - x_op)
-    u = LQR_input(x, x_op, u_op, K)
+    u = LQI_input(x, Ka)
     ud = u[0]
     uq = u[1]
 
@@ -179,16 +205,18 @@ def nonlinear_dynamics(t, x, u_op, x_op, K):
     id_dot = -(Rp/Lp)*id + (1/Lp)*ud + p*theta_m_dot*iq
     iq_dot = -(Rp/Lp)*iq - (p*lam/Lp)*theta_m_dot + (1/Lp)*uq - p*theta_m_dot*id
     theta_m_2dot = (3*p*lam/(2*Js))*iq - (b/Js)*theta_m_dot - T_load/Js
+    q_dot = reference(t) - theta_m_dot
 
-    return np.array([id_dot, iq_dot, theta_m_2dot, theta_m_dot])
+    return np.array([id_dot, iq_dot, theta_m_2dot, theta_m_dot, q_dot])
 
 # Initial states
 id_0 = 0
 iq_0 = 0
 theta_m_dot_0 = 0#theta_m_dot_op
 theta_m_0 = 0
+q_0 = 0
 
-x_0 = np.array([id_0, iq_0, theta_m_dot_0, theta_m_0])
+x_0 = np.array([id_0, iq_0, theta_m_dot_0, theta_m_0, q_0])
 
 # Control input
 u = np.array([ud_op, uq_op])
@@ -208,7 +236,7 @@ sol = solve_ivp(
     nonlinear_dynamics,
     (t_start, t_end),
     x_0,
-    args=(u_op, x_op, K),
+    args=(Ka,),
     t_eval=t_eval,
     method='RK45'
 )
@@ -257,7 +285,7 @@ for i in range(len(t)):
 
     # Reconstruct ud and uq for visualisation
     # u_sim = u_op - K @ (sol.y[:, i] - x_op)
-    u_sim = LQR_input(sol.y[:, i], x_op, u_op, K)
+    u_sim = LQI_input(sol.y[:, i], Ka)
     ud_sim[i] = u_sim[0]
     uq_sim[i] = u_sim[1]
 

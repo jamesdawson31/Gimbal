@@ -13,12 +13,13 @@ def LQR_input(x, x_op, u_op, K):
 def LQI_input(xa, Ka):
     return - Ka @ xa
 
-def reference(t):
-    # Step reference of 60 rpm
-    if t < 0.1:
-        return 0
+def r_square_wave(t, freq, rpm):
+    T = 1 / freq
+
+    if (t % T) > (T / 2):
+        return rpm2radps(rpm)
     else:
-        return rpm2radps(60)
+        return 0
 
 # Define the system parameters
 p = 11                              # Number of pole pairs
@@ -29,6 +30,10 @@ lam = 2*load_torque_1A/(3*p*1)      # Flux linkage     (Wb)
 b = 5e-4                            # Viscous friction coefficient (Nms/rad)    ASSUMED
 Js = 5e-5                           # Moment of inertia (kgm^2)                 ASSUMED
 T_load = 0                          # Load torque (Nm)                          ASSUMED
+
+# Reference parameters for simulation
+square_wave_freq = 15                # Frequency of reference square wave (Hz)
+square_wave_rpm = 60                # Amplitude of reference square wave (rpm)
 
 print(f"Flux linkage: {lam:.6f} Wb")
 
@@ -158,7 +163,7 @@ id_max = 0.1
 iq_max = 5
 theta_m_dot_max = rpm2radps(2000)
 theta_m_max = np.inf
-q_max = 10
+q_max = 0.1
 Qa = np.diag([1/id_max**2, 1/iq_max**2, 1/theta_m_dot_max**2, 1/theta_m_max**2, 1/q_max**2])
 ud_max = 12
 uq_max = 12
@@ -192,12 +197,24 @@ print(L)
 
 
 ## Simulate dynamics
-def nonlinear_dynamics(t, x, Ka):
-    # Unpack state variables
-    id, iq, theta_m_dot, theta_m, q = x
+def nonlinear_dynamics(t, x, Ka, L):
+    # Unpack true states
+    xa = x[:5]
+    id, iq, theta_m_dot, theta_m, q = xa
+    
+    # Unpack estimated states
+    x_hat = x[5:]
+    id_hat, iq_hat, theta_m_dot_hat, theta_m_hat = x_hat
+
+    # Output measurement
+    y = C @ xa
+
+    # Estimate state x_hat using Kalman filter
+
 
     # Compute control input using state feedback
-    u = LQI_input(x, Ka)
+    # Add gain interpolation later
+    u = LQI_input(xa, Ka)
     ud = u[0]
     uq = u[1]
 
@@ -205,7 +222,7 @@ def nonlinear_dynamics(t, x, Ka):
     id_dot = -(Rp/Lp)*id + (1/Lp)*ud + p*theta_m_dot*iq
     iq_dot = -(Rp/Lp)*iq - (p*lam/Lp)*theta_m_dot + (1/Lp)*uq - p*theta_m_dot*id
     theta_m_2dot = (3*p*lam/(2*Js))*iq - (b/Js)*theta_m_dot - T_load/Js
-    q_dot = reference(t) - theta_m_dot
+    q_dot = r_square_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot
 
     return np.array([id_dot, iq_dot, theta_m_2dot, theta_m_dot, q_dot])
 
@@ -278,10 +295,14 @@ def T_Park_inv(theta):
 i_dq = np.column_stack((id_sim, iq_sim))
 i_abc = np.zeros((len(t), 3))
 u_abc = np.zeros((len(t), 3))
+ref = np.zeros_like(t)
 
 for i in range(len(t)):
     # Get current state
     theta_m_i = theta_m_sim[i]
+
+    # Reconstruct reference
+    ref[i] = r_square_wave(t[i], freq=square_wave_freq, rpm=square_wave_rpm)
 
     # Reconstruct ud and uq for visualisation
     # u_sim = u_op - K @ (sol.y[:, i] - x_op)
@@ -322,9 +343,11 @@ plt.grid()
 
 # theta_m_dot
 plt.subplot(4,2,3)
-plt.plot(t, theta_m_dot_sim)
-plt.axhline(theta_m_dot_op, color='r', linestyle='--', label='theta_m_dot_op')
+plt.plot(t, theta_m_dot_sim, label='Rotor speed')
+plt.plot(t, ref, 'k--', label='Reference')
+# plt.axhline(theta_m_dot_op, color='r', linestyle='--', label='theta_m_dot_op')
 plt.ylabel('ωm (rad/s)')
+plt.legend()
 plt.grid()
 
 # theta_m

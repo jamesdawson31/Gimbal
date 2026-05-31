@@ -20,6 +20,9 @@ def r_square_wave(t, freq, rpm):
         return rpm2radps(rpm)
     else:
         return 0
+    
+def r_sine_wave(t, freq, rpm):
+    return rpm * np.sin(2*np.pi*freq*t)
 
 # Define the system parameters
 p = 11                              # Number of pole pairs
@@ -32,7 +35,7 @@ Js = 5e-5                           # Moment of inertia (kgm^2)                 
 T_load = 0                          # Load torque (Nm)                          ASSUMED
 
 # Reference parameters for simulation
-square_wave_freq = 15                # Frequency of reference square wave (Hz)
+square_wave_freq = 5                # Frequency of reference square wave (Hz)
 square_wave_rpm = 60                # Amplitude of reference square wave (rpm)
 
 print(f"Flux linkage: {lam:.6f} Wb")
@@ -40,7 +43,8 @@ print(f"Flux linkage: {lam:.6f} Wb")
 ## Define system dynamics and state-space representation
 # Define symbolic state variables
 id_dot, iq_dot, theta_m_2dot, theta_m_dot, id, iq, theta_m = sp.symbols(
-    "id_dot iq_dot theta_m_2dot theta_m_dot id iq theta_m")
+    "id_dot iq_dot theta_m_2dot theta_m_dot id iq theta_m"
+)
 
 # Define symbolic control variables
 ud, uq = sp.symbols("ud uq")
@@ -182,8 +186,10 @@ C = np.array([[1, 0, 0, 0],
 D = np.zeros((3, 2))
 
 # Define process disturbance noise covariance W and measurement noise covariance V
-W = np.diag([1e-6, 1e-6, 1e-6, 1e-6])
-V = np.diag([1e-4, 1e-4, 1e-4])
+w = np.array([1e-2, 1e-2, 1e-2, 1e-2])
+v = np.array([1e-1, 1e-1, 1e-1])
+W = np.diag(w)
+V = np.diag(v)
 
 # Increase robustness of Kalman filter by inflating process noise covariance W
 mu = 0
@@ -197,34 +203,48 @@ print(L)
 
 
 ## Simulate dynamics
-def nonlinear_dynamics(t, x, Ka, L):
+def nonlinear_dynamics(t, x_full, Ka, L):
     # Unpack true states
-    xa = x[:5]
-    id, iq, theta_m_dot, theta_m, q = xa
+    x = x_full[:4]
+    id, iq, theta_m_dot, theta_m = x
+    q = x_full[4]
     
     # Unpack estimated states
-    x_hat = x[5:]
+    x_hat = x_full[5:]
     id_hat, iq_hat, theta_m_dot_hat, theta_m_hat = x_hat
 
-    # Output measurement
-    y = C @ xa
-
-    # Estimate state x_hat using Kalman filter
-
+    # Output measurement with measurement noise v
+    y = C @ x + np.random.normal(0, v)
 
     # Compute control input using state feedback
     # Add gain interpolation later
-    u = LQI_input(xa, Ka)
-    ud = u[0]
-    uq = u[1]
+    x_hat_q = np.append(x_hat, q)
+    u = LQI_input(x_hat_q, Ka)
+    ud, uq = u
 
     # Compute state derivatives
     id_dot = -(Rp/Lp)*id + (1/Lp)*ud + p*theta_m_dot*iq
     iq_dot = -(Rp/Lp)*iq - (p*lam/Lp)*theta_m_dot + (1/Lp)*uq - p*theta_m_dot*id
     theta_m_2dot = (3*p*lam/(2*Js))*iq - (b/Js)*theta_m_dot - T_load/Js
-    q_dot = r_square_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot
+    
+    # Add process noise (uncertainty in the model)
+    x_dot = np.array([id_dot, iq_dot, theta_m_2dot, theta_m_dot]) + np.random.normal(0, w)
 
-    return np.array([id_dot, iq_dot, theta_m_2dot, theta_m_dot, q_dot])
+    # Integral state
+    # q_dot = r_square_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat
+    q_dot = r_sine_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat
+
+    # Augmented state derivative vector
+    xa_dot = np.append(x_dot, q_dot)
+
+    # Kalman observer
+    y_hat = C @ x_hat
+    x_hat_dot = A @ x_hat + B @ u + L @ (y - y_hat)
+
+    # Create full derivative vector
+    x_full_dot = np.concatenate((xa_dot, x_hat_dot), axis=None)
+
+    return x_full_dot
 
 # Initial states
 id_0 = 0
@@ -233,7 +253,9 @@ theta_m_dot_0 = 0#theta_m_dot_op
 theta_m_0 = 0
 q_0 = 0
 
-x_0 = np.array([id_0, iq_0, theta_m_dot_0, theta_m_0, q_0])
+xa_0 = np.array([id_0, iq_0, theta_m_dot_0, theta_m_0, q_0])
+x_hat_0 = xa_0[:4]
+x_0 = np.concatenate((xa_0, x_hat_0), axis=None)
 
 # Control input
 u = np.array([ud_op, uq_op])
@@ -253,17 +275,17 @@ sol = solve_ivp(
     nonlinear_dynamics,
     (t_start, t_end),
     x_0,
-    args=(Ka,),
+    args=(Ka, L),
     t_eval=t_eval,
     method='RK45'
 )
 
 # Unpack results
 t = sol.t
-id_sim = sol.y[0]
-iq_sim = sol.y[1]
-theta_m_dot_sim = sol.y[2]
-theta_m_sim = sol.y[3]
+id_sim, iq_sim, theta_m_dot_sim, theta_m_sim, q_sim, \
+    id_hat_sim, iq_hat_sim, theta_m_dot_hat_sim, theta_m_hat_sim = sol.y
+
+x_hat_sim = np.array([id_hat_sim, iq_hat_sim, theta_m_dot_hat_sim, theta_m_hat_sim, q_sim]).T
 
 ## Convert back to the abc frame for visualisation
 # Define transformation matrices for Clarke and Park transforms
@@ -298,21 +320,20 @@ u_abc = np.zeros((len(t), 3))
 ref = np.zeros_like(t)
 
 for i in range(len(t)):
-    # Get current state
-    theta_m_i = theta_m_sim[i]
-
     # Reconstruct reference
-    ref[i] = r_square_wave(t[i], freq=square_wave_freq, rpm=square_wave_rpm)
+    # ref[i] = r_square_wave(t[i], freq=square_wave_freq, rpm=square_wave_rpm)
+    ref[i] = r_sine_wave(t[i], freq=square_wave_freq, rpm=square_wave_rpm)
 
     # Reconstruct ud and uq for visualisation
     # u_sim = u_op - K @ (sol.y[:, i] - x_op)
-    u_sim = LQI_input(sol.y[:, i], Ka)
-    ud_sim[i] = u_sim[0]
-    uq_sim[i] = u_sim[1]
+    u_sim = LQI_input(x_hat_sim[i], Ka)
+    # ud_sim[i] = u_sim[0]
+    # uq_sim[i] = u_sim[1]
+    ud_sim[i], uq_sim[i] = u_sim
 
     # Inverse Clarke and Park transforms to get abc currents
-    i_abc[i] = T_Clarke_inv() @ T_Park_inv(p*theta_m_i) @ np.array(i_dq[i])
-    u_abc[i] = T_Clarke_inv() @ T_Park_inv(p*theta_m_i) @ u_sim
+    i_abc[i] = T_Clarke_inv() @ T_Park_inv(p*theta_m_sim[i]) @ np.array(i_dq[i])
+    u_abc[i] = T_Clarke_inv() @ T_Park_inv(p*theta_m_sim[i]) @ u_sim
 
 
 # Unpack phase currents and voltages
@@ -329,21 +350,26 @@ plt.figure(figsize=(10,8))
 
 # id
 plt.subplot(4,2,1)
-plt.plot(t, id_sim)
+plt.plot(t, id_sim, label="Real")
+plt.plot(t, id_hat_sim, linestyle='--', label='Estimate')
 plt.axhline(id_op, color='r', linestyle='--', label='id_op')
 plt.ylabel('id (A)')
+plt.legend()
 plt.grid()
 
 # iq
 plt.subplot(4,2,2)
-plt.plot(t, iq_sim)
+plt.plot(t, iq_sim, label="Real")
+plt.plot(t, iq_hat_sim, linestyle='--', label='Estimate')
 plt.axhline(iq_op, color='r', linestyle='--', label='iq_op')
 plt.ylabel('iq (A)')
+plt.legend()
 plt.grid()
 
 # theta_m_dot
 plt.subplot(4,2,3)
-plt.plot(t, theta_m_dot_sim, label='Rotor speed')
+plt.plot(t, theta_m_dot_sim, label="Real")
+plt.plot(t, theta_m_dot_hat_sim, linestyle='--', label='Estimate')
 plt.plot(t, ref, 'k--', label='Reference')
 # plt.axhline(theta_m_dot_op, color='r', linestyle='--', label='theta_m_dot_op')
 plt.ylabel('ωm (rad/s)')
@@ -352,8 +378,10 @@ plt.grid()
 
 # theta_m
 plt.subplot(4,2,4)
-plt.plot(t, theta_m_sim)
+plt.plot(t, theta_m_sim, label="Real")
+plt.plot(t, theta_m_hat_sim, linestyle='--', label='Estimate')
 plt.ylabel('θm (rad)')
+plt.legend()
 plt.grid()
 
 # ud
@@ -361,6 +389,7 @@ plt.subplot(4,2,5)
 plt.plot(t, ud_sim)
 plt.axhline(ud_op, color='r', linestyle='--', label='ud_op')
 plt.ylabel('ud (V)')
+plt.legend()
 plt.grid()
 
 # uq
@@ -368,6 +397,7 @@ plt.subplot(4,2,6)
 plt.plot(t, uq_sim)
 plt.axhline(uq_op, color='r', linestyle='--', label='uq_op')
 plt.ylabel('uq (V)')
+plt.legend()
 plt.grid()
 
 # ia, ib, ic

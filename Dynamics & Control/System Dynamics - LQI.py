@@ -3,26 +3,8 @@ import control as ct
 import matplotlib.pyplot as plt
 import sympy as sp
 from scipy.integrate import solve_ivp
-
-def rpm2radps(rpm):
-    return np.pi/30 * rpm
-
-def LQR_input(x, x_op, u_op, K):
-    return u_op - K @ (x - x_op)
-
-def LQI_input(xa, Ka):
-    return - Ka @ xa
-
-def r_square_wave(t, freq, rpm):
-    T = 1 / freq
-
-    if (t % T) > (T / 2):
-        return rpm2radps(rpm)
-    else:
-        return 0
-    
-def r_sine_wave(t, freq, rpm):
-    return rpm * np.sin(2*np.pi*freq*t)
+from Auxiliary_Functions import *
+from Gain_Scheduling import *
 
 # Define the system parameters
 p = 11                              # Number of pole pairs
@@ -34,96 +16,25 @@ b = 5e-4                            # Viscous friction coefficient (Nms/rad)    
 Js = 5e-5                           # Moment of inertia (kgm^2)                 ASSUMED
 T_load = 0                          # Load torque (Nm)                          ASSUMED
 
+print(f"Flux linkage: {lam:.6f} Wb")
+
+# Define dictionary of parameters for linearisation function
+params = {
+    'p': p,
+    'Rp': Rp,
+    'Lp': Lp,
+    'lam': lam,
+    'b': b,
+    'Js': Js,
+    'T_load': T_load
+}
+
 # Reference parameters for simulation
 square_wave_freq = 5                # Frequency of reference square wave (Hz)
 square_wave_rpm = 60                # Amplitude of reference square wave (rpm)
 
-print(f"Flux linkage: {lam:.6f} Wb")
-
-## Define system dynamics and state-space representation
-# Define symbolic state variables
-id_dot, iq_dot, theta_m_2dot, theta_m_dot, id, iq, theta_m = sp.symbols(
-    "id_dot iq_dot theta_m_2dot theta_m_dot id iq theta_m"
-)
-
-# Define symbolic control variables
-ud, uq = sp.symbols("ud uq")
-
-# Define nonlinear dynamics
-id_dot = -(Rp/Lp)*id + (1/Lp)*ud + p*theta_m_dot*iq
-iq_dot = -(Rp/Lp)*iq - (p*lam/Lp)*theta_m_dot + (1/Lp)*uq - p*theta_m_dot*id
-theta_m_2dot = (3*p*lam/(2*Js))*iq - (b/Js)*theta_m_dot - T_load/Js
-theta_m_dot = theta_m_dot
-
-# Create symbolic state vector
-x = sp.Matrix([
-    id,
-    iq,
-    theta_m_dot,
-    theta_m
-])
-
-# Create symbolic control vector
-u = sp.Matrix([
-    ud,
-    uq
-])
-
-# Create symbloc state derivative vector
-x_dot = sp.Matrix([
-    id_dot,
-    iq_dot,
-    theta_m_2dot,
-    theta_m_dot
-])
-
-# Compute Jacobians
-Jx = x_dot.jacobian(x)
-Ju = x_dot.jacobian(u)
-
-sp.pprint(Jx)
-sp.pprint(Ju)
-
-# Define operating point
-theta_m_dot_op = rpm2radps(60)
-iq_op = (2*b/(3*p*lam))*theta_m_dot_op
-id_op = 0
-theta_m_op = 0
-x_op = np.array([id_op, iq_op, theta_m_dot_op, theta_m_op])
-uq_op = ((2*Rp*b/(3*p*lam)) + p*lam)*theta_m_dot_op
-ud_op = -p*Lp*theta_m_dot_op*iq_op
-u_op = np.array([ud_op, uq_op])
-
-print("\nOperating Point Values:")
-print(f"theta_m_dot_op = {float(theta_m_dot_op):.6f}")
-print(f"iq_op          = {float(iq_op):.6f}")
-print(f"id_op          = {float(id_op):.6f}")
-print(f"theta_m_op     = {float(theta_m_op):.6f}")
-print(f"uq_op          = {float(uq_op):.6f}")
-print(f"ud_op          = {float(ud_op):.6f}")
-
-# Evaluate Jacobians for linearised state-space matrices A and B
-print("\nLinearised State-Space Matrices:")
-A = Jx.subs({
-    id: id_op,
-    iq: iq_op,
-    theta_m_dot: theta_m_dot_op,
-    theta_m: theta_m_op,
-    ud: ud_op,
-    uq: uq_op
-})
-
-B = Ju.subs({
-    id: id_op,
-    iq: iq_op,
-    theta_m_dot: theta_m_dot_op,
-    theta_m: theta_m_op,
-    ud: ud_op,
-    uq: uq_op
-})
-
-sp.pprint(A)
-sp.pprint(B)
+# Linearise the system at the operating point (theta_rpm = 60)
+A, B = linearise(theta_rpm=60, params=params)
 
 # Convert to numpy arrays
 A = np.array(A).astype(np.float64)
@@ -146,21 +57,6 @@ else:
 # Ci to only regulate theta_m_dot
 Ci = np.array([[0, 0, 1, 0]])
 
-# Augmented A matrix (Aa = [[A, 0], [-Ci, 0]])
-Aa = np.block([
-    [A, np.zeros((4,1))],
-    [-Ci, 0]
-])
-
-# Augmented B matrix (Ba = [[B], [0]])
-Ba = np.vstack((B, np.zeros((1,2))))
-
-print("\nAugmented State-Space Matrices for LQI:")
-print("Aa:")
-print(Aa)
-print("Ba:")
-print(Ba)
-
 ## LQI Controller Design
 # Define weighting matrices Qa and Ra based on maximum expected values of states and inputs
 id_max = 0.1
@@ -172,11 +68,6 @@ Qa = np.diag([1/id_max**2, 1/iq_max**2, 1/theta_m_dot_max**2, 1/theta_m_max**2, 
 ud_max = 12
 uq_max = 12
 Ra = np.diag([1/ud_max**2, 1/uq_max**2])
-
-# Compute LQR gain matrix K
-Ka, S, E = ct.lqr(Aa, Ba, Qa, Ra)
-print("\nLQI Gain Matrix Ka:")
-print(Ka)
 
 ## Kalman Filter Design
 # Define measurement matrix C and D
@@ -191,13 +82,11 @@ v = np.array([1e-1, 1e-1, 1e-1])
 W = np.diag(w)
 V = np.diag(v)
 
-# Increase robustness of Kalman filter by inflating process noise covariance W
-mu = 0
-W = W + mu*B@B.T
+Ka, L = design_lqig_controller(A, B, C, D, Ci, Qa, Ra, W, V)
 
-# Calculate observer gain matrix L using dual LQR design
-L, S_kalman, E_kalman = ct.lqr(A.T, C.T, W, V)
-L = L.T
+print("\nLQI Gain Matrix Ka:")
+print(Ka)
+
 print("\nKalman Filter Gain Matrix L:")
 print(L)
 
@@ -256,9 +145,6 @@ q_0 = 0
 xa_0 = np.array([id_0, iq_0, theta_m_dot_0, theta_m_0, q_0])
 x_hat_0 = xa_0[:4]
 x_0 = np.concatenate((xa_0, x_hat_0), axis=None)
-
-# Control input
-u = np.array([ud_op, uq_op])
 
 # Simulation time
 t_start = 0
@@ -352,7 +238,7 @@ plt.figure(figsize=(10,8))
 plt.subplot(4,2,1)
 plt.plot(t, id_sim, label="Real")
 plt.plot(t, id_hat_sim, linestyle='--', label='Estimate')
-plt.axhline(id_op, color='r', linestyle='--', label='id_op')
+# plt.axhline(id_op, color='r', linestyle='--', label='id_op')
 plt.ylabel('id (A)')
 plt.legend()
 plt.grid()
@@ -361,7 +247,7 @@ plt.grid()
 plt.subplot(4,2,2)
 plt.plot(t, iq_sim, label="Real")
 plt.plot(t, iq_hat_sim, linestyle='--', label='Estimate')
-plt.axhline(iq_op, color='r', linestyle='--', label='iq_op')
+# plt.axhline(iq_op, color='r', linestyle='--', label='iq_op')
 plt.ylabel('iq (A)')
 plt.legend()
 plt.grid()
@@ -387,7 +273,7 @@ plt.grid()
 # ud
 plt.subplot(4,2,5)
 plt.plot(t, ud_sim)
-plt.axhline(ud_op, color='r', linestyle='--', label='ud_op')
+# plt.axhline(ud_op, color='r', linestyle='--', label='ud_op')
 plt.ylabel('ud (V)')
 plt.legend()
 plt.grid()
@@ -395,7 +281,7 @@ plt.grid()
 # uq
 plt.subplot(4,2,6)
 plt.plot(t, uq_sim)
-plt.axhline(uq_op, color='r', linestyle='--', label='uq_op')
+# plt.axhline(uq_op, color='r', linestyle='--', label='uq_op')
 plt.ylabel('uq (V)')
 plt.legend()
 plt.grid()

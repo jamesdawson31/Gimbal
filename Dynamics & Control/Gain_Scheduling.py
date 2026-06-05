@@ -103,7 +103,7 @@ def linearise(theta_rpm, params):
     
     return A, B
 
-def design_lqig_controller(A, B, C, D, Ci, Qa, Ra, W, V, mu=0):
+def design_lqig_controller(A, B, C, D, Ci, Qa, Ra, W, V, mu):
     # Augmented A matrix (Aa = [[A, 0], [-Ci, 0]])
     Aa = np.block([
         [A, np.zeros((4,1))],
@@ -119,7 +119,7 @@ def design_lqig_controller(A, B, C, D, Ci, Qa, Ra, W, V, mu=0):
     # print("Ba:")
     # print(Ba)
 
-    # Compute LQR gain matrix K
+    # Compute LQR gain matrix Ka
     Ka, S, E = ct.lqr(Aa, Ba, Qa, Ra)
 
     # Increase robustness of Kalman filter by inflating process noise covariance W
@@ -132,8 +132,47 @@ def design_lqig_controller(A, B, C, D, Ci, Qa, Ra, W, V, mu=0):
     return Ka, L
 
 
-def create_lookup_table(theta_rpm_set, params):
+def create_lookup_table(theta_rpm_set, C, D, Ci, Qa, Ra, W, V, mu, params, dir):
     for theta_rpm in theta_rpm_set:
+        # Calculate all necessary matrices for LQIG controller
         A, B = linearise(theta_rpm, params)
+        Ka, L = design_lqig_controller(A, B, C, D, Ci, Qa, Ra, W, V, mu)
 
-        
+        # Save to .npz files
+        filename = f"{dir}/LQIG_Gains_{theta_rpm}rpm.npz"
+        np.savez(filename, Ka=Ka, L=L)
+
+def load_gains(theta_rpm_set, dir):
+    Ka_list = []
+    L_list = []
+
+    for theta_rpm in theta_rpm_set:
+        gains = np.load(f"{dir}/LQIG_Gains_{theta_rpm}rpm.npz")
+        Ka_list.append(gains['Ka'])
+        L_list.append(gains['L'])
+
+    return Ka_list, L_list
+
+
+def gain_scheduling(theta_rpm, theta_rpm_set, Ka_list, L_list, dir):
+    Ka_interp = np.zeros_like(Ka_list[0])
+    L_interp = np.zeros_like(L_list[0])
+
+    if theta_rpm < theta_rpm_set[0]:
+        Ka_interp = Ka_list[0]
+        L_interp = L_list[0]
+    elif theta_rpm > theta_rpm_set[-1]:
+        Ka_interp = Ka_list[-1]
+        L_interp = L_list[-1]
+    else:
+        for i in range(len(theta_rpm_set)-1):
+            if theta_rpm_set[i] <= theta_rpm <= theta_rpm_set[i+1]:
+                # Linear interpolation
+                alpha = (theta_rpm - theta_rpm_set[i]) / (theta_rpm_set[i+1] - theta_rpm_set[i])
+                # print(f"alpha: {alpha:.4f} for theta_rpm: {theta_rpm} between {theta_rpm_set[i]} and {theta_rpm_set[i+1]}")
+                alpha = np.clip(alpha, 0, 1)  # Ensure alpha is between 0 and 1
+                Ka_interp = (1-alpha)*Ka_list[i] + alpha*Ka_list[i+1]
+                L_interp = (1-alpha)*L_list[i] + alpha*L_list[i+1]
+                break
+
+    return Ka_interp, L_interp

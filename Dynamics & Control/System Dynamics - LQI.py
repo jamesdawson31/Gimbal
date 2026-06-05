@@ -29,10 +29,6 @@ params = {
     'T_load': T_load
 }
 
-# Reference parameters for simulation
-square_wave_freq = 5                # Frequency of reference square wave (Hz)
-square_wave_rpm = 60                # Amplitude of reference square wave (rpm)
-
 # Linearise the system at the operating point (theta_rpm = 60)
 A, B = linearise(theta_rpm=60, params=params)
 
@@ -82,17 +78,29 @@ v = np.array([1e-1, 1e-1, 1e-1])
 W = np.diag(w)
 V = np.diag(v)
 
-Ka, L = design_lqig_controller(A, B, C, D, Ci, Qa, Ra, W, V)
+# Robustness parameter
+mu = 0 
 
-print("\nLQI Gain Matrix Ka:")
-print(Ka)
+# Ka, L = design_lqig_controller(A, B, C, D, Ci, Qa, Ra, W, V, mu)
 
-print("\nKalman Filter Gain Matrix L:")
-print(L)
+# print("\nLQI Gain Matrix Ka:")
+# print(Ka)
 
+# print("\nKalman Filter Gain Matrix L:")
+# print(L)
+
+## Create lookup table for gain scheduling (only run when parameter values change)
+theta_rpm_set = np.arange(-2500, 2501, 500)
+dir = "C:\\Users\\james.dawson\\Documents\\Projects\\Gimbal\\Dynamics & Control\\Gains"
+# create_lookup_table(theta_rpm_set, C, D, Ci, Qa, Ra, W, V, mu, params, dir)
+Ka_list, L_list = load_gains(theta_rpm_set, dir)
+
+# Reference parameters for simulation
+square_wave_freq = 0.2                # Frequency of reference square wave (Hz)
+square_wave_rpm = 1000                # Amplitude of reference square wave (rpm)
 
 ## Simulate dynamics
-def nonlinear_dynamics(t, x_full, Ka, L):
+def nonlinear_dynamics(t, x_full, Ka_list, L_list):       # (t, x_full, Ka_list, L_list):
     # Unpack true states
     x = x_full[:4]
     id, iq, theta_m_dot, theta_m = x
@@ -101,6 +109,9 @@ def nonlinear_dynamics(t, x_full, Ka, L):
     # Unpack estimated states
     x_hat = x_full[5:]
     id_hat, iq_hat, theta_m_dot_hat, theta_m_hat = x_hat
+
+    # Interpolate gains based on current estimate of theta_m_dot
+    Ka, L = gain_scheduling(theta_m_dot_hat, theta_rpm_set, Ka_list, L_list, dir)
 
     # Output measurement with measurement noise v
     y = C @ x + np.random.normal(0, v)
@@ -120,8 +131,8 @@ def nonlinear_dynamics(t, x_full, Ka, L):
     x_dot = np.array([id_dot, iq_dot, theta_m_2dot, theta_m_dot]) + np.random.normal(0, w)
 
     # Integral state
-    # q_dot = r_square_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat
-    q_dot = r_sine_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat
+    q_dot = r_square_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat
+    # q_dot = r_sine_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat
 
     # Augmented state derivative vector
     xa_dot = np.append(x_dot, q_dot)
@@ -147,24 +158,21 @@ x_hat_0 = xa_0[:4]
 x_0 = np.concatenate((xa_0, x_hat_0), axis=None)
 
 # Simulation time
+num_periods = 1
 t_start = 0
-t_end = 0.5
+t_end = num_periods * (1 / square_wave_freq)
 num_points = 1000
 t_eval = np.linspace(t_start, t_end, num_points)
-
-# Record other variables for visualisation
-ud_sim = np.zeros(num_points)
-uq_sim = np.zeros(num_points)
 
 # Run simulation
 sol = solve_ivp(
     nonlinear_dynamics,
     (t_start, t_end),
     x_0,
-    args=(Ka, L),
-    t_eval=t_eval,
+    args=(Ka_list, L_list),
     method='RK45'
 )
+#t_eval=t_eval,
 
 # Unpack results
 t = sol.t
@@ -200,6 +208,9 @@ def T_Park_inv(theta):
         [np.sin(theta),  np.cos(theta)]
     ])
 
+# Record other variables for visualisation
+ud_sim = np.zeros_like(t)
+uq_sim = np.zeros_like(t)
 i_dq = np.column_stack((id_sim, iq_sim))
 i_abc = np.zeros((len(t), 3))
 u_abc = np.zeros((len(t), 3))
@@ -207,12 +218,14 @@ ref = np.zeros_like(t)
 
 for i in range(len(t)):
     # Reconstruct reference
-    # ref[i] = r_square_wave(t[i], freq=square_wave_freq, rpm=square_wave_rpm)
-    ref[i] = r_sine_wave(t[i], freq=square_wave_freq, rpm=square_wave_rpm)
+    ref[i] = r_square_wave(t[i], freq=square_wave_freq, rpm=square_wave_rpm)
+    # ref[i] = r_sine_wave(t[i], freq=square_wave_freq, rpm=square_wave_rpm)
 
     # Reconstruct ud and uq for visualisation
     # u_sim = u_op - K @ (sol.y[:, i] - x_op)
+    Ka, L = gain_scheduling(theta_m_dot_hat_sim[i], theta_rpm_set, Ka_list, L_list, dir)
     u_sim = LQI_input(x_hat_sim[i], Ka)
+
     # ud_sim[i] = u_sim[0]
     # uq_sim[i] = u_sim[1]
     ud_sim[i], uq_sim[i] = u_sim
@@ -254,19 +267,19 @@ plt.grid()
 
 # theta_m_dot
 plt.subplot(4,2,3)
-plt.plot(t, theta_m_dot_sim, label="Real")
-plt.plot(t, theta_m_dot_hat_sim, linestyle='--', label='Estimate')
-plt.plot(t, ref, 'k--', label='Reference')
-# plt.axhline(theta_m_dot_op, color='r', linestyle='--', label='theta_m_dot_op')
-plt.ylabel('ωm (rad/s)')
+plt.plot(t, radps2rpm(theta_m_dot_sim), label="Real")
+plt.plot(t, radps2rpm(theta_m_dot_hat_sim), linestyle='--', label='Estimate')
+plt.plot(t, radps2rpm(ref), 'k--', label='Reference')
+# plt.axhline(radps2rpm(theta_m_dot_op), color='r', linestyle='--', label='theta_m_dot_op')
+plt.ylabel('ωm (rpm)')
 plt.legend()
 plt.grid()
 
 # theta_m
 plt.subplot(4,2,4)
-plt.plot(t, theta_m_sim, label="Real")
-plt.plot(t, theta_m_hat_sim, linestyle='--', label='Estimate')
-plt.ylabel('θm (rad)')
+plt.plot(t, rad2rev(theta_m_sim), label="Real")
+plt.plot(t, rad2rev(theta_m_hat_sim), linestyle='--', label='Estimate')
+plt.ylabel('θm (rev)')
 plt.legend()
 plt.grid()
 

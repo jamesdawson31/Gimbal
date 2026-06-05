@@ -3,6 +3,15 @@ import numpy as np
 def rpm2radps(rpm):
     return np.pi/30 * rpm
 
+def radps2rpm(radps):
+    return radps * 30/np.pi
+
+def rad2rev(rad):
+    return rad / (2*np.pi)
+
+def rev2rad(rev):
+    return rev * (2*np.pi)
+
 def LQI_input(xa, Ka):
     return - Ka @ xa
 

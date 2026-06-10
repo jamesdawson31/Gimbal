@@ -96,7 +96,7 @@ dir = "C:\\Users\\james.dawson\\Documents\\Projects\\Gimbal\\Dynamics & Control\
 Ka_list, L_list = load_gains(theta_rpm_set, dir)
 
 # Reference parameters for simulation
-square_wave_freq = 0.2                # Frequency of reference square wave (Hz)
+square_wave_freq = 0.5                # Frequency of reference square wave (Hz)
 square_wave_rpm = 1000                # Amplitude of reference square wave (rpm)
 
 ## Simulate dynamics
@@ -158,7 +158,7 @@ x_hat_0 = xa_0[:4]
 x_0 = np.concatenate((xa_0, x_hat_0), axis=None)
 
 # Simulation time
-num_periods = 1
+num_periods = 2
 t_start = 0
 t_end = num_periods * (1 / square_wave_freq)
 num_points = 1000
@@ -279,6 +279,8 @@ plt.grid()
 plt.subplot(4,2,4)
 plt.plot(t, rad2rev(theta_m_sim), label="Real")
 plt.plot(t, rad2rev(theta_m_hat_sim), linestyle='--', label='Estimate')
+# plt.plot(t, rad2rev(theta_m_sim % (2*np.pi)), label="Real")
+# plt.plot(t, rad2rev(theta_m_hat_sim % (2*np.pi)), linestyle='--', label='Estimate')
 plt.ylabel('θm (rev)')
 plt.legend()
 plt.grid()
@@ -320,3 +322,6 @@ plt.grid()
 
 plt.tight_layout()
 plt.show()
+
+# # Ask to save results
+# save = input("Save results? (y/n): ")

@@ -34,27 +34,31 @@ from Gain_Scheduling import *
 # plt.show()
 
 
-theta_rpm_set = np.arange(-2500, 2501, 500)
-print(theta_rpm_set)
-dir = "C:\\Users\\james.dawson\\Documents\\Projects\\Gimbal\\Dynamics & Control\\Gains"
-Ka_list, L_list = load_gains(theta_rpm_set, dir)
-Ka_neg2500 = Ka_list[0]
-Ka_neg2000 = Ka_list[1]
+# theta_rpm_set = np.arange(-2500, 2501, 500)
+# print(theta_rpm_set)
+# dir = "C:\\Users\\james.dawson\\Documents\\Projects\\Gimbal\\Dynamics & Control\\Gains"
+# Ka_list, L_list = load_gains(theta_rpm_set, dir)
+# Ka_neg2500 = Ka_list[0]
+# Ka_neg2000 = Ka_list[1]
 
-print("Ka for -2500 rpm:")
-print(Ka_neg2500)
-print("\nKa for -2000 rpm:")
-print(Ka_neg2000)
+# print("Ka for -2500 rpm:")
+# print(Ka_neg2500)
+# print("\nKa for -2000 rpm:")
+# print(Ka_neg2000)
 
-test_theta_rpm = -2250
-gain_scheduling(test_theta_rpm, theta_rpm_set, Ka_list, L_list, dir)
-Ka_interp, L_interp = gain_scheduling(test_theta_rpm, theta_rpm_set, Ka_list, L_list, dir)
-print("\nInterpolated Ka for theta_rpm =", test_theta_rpm)
-print(Ka_interp)
-print("\nInterpolated L for theta_rpm =", test_theta_rpm)
-print(L_interp)
+# test_theta_rpm = -2250
+# gain_scheduling(test_theta_rpm, theta_rpm_set, Ka_list, L_list, dir)
+# Ka_interp, L_interp = gain_scheduling(test_theta_rpm, theta_rpm_set, Ka_list, L_list, dir)
+# print("\nInterpolated Ka for theta_rpm =", test_theta_rpm)
+# print(Ka_interp)
+# print("\nInterpolated L for theta_rpm =", test_theta_rpm)
+# print(L_interp)
 
 
+a = np.arange(0, 6*np.pi+0.1, 0.1)
+b = a % (2*np.pi)
+plt.plot(a, b)
+plt.show()
 
 # for i in range(len(theta_rpm_set)):
 #     gains = np.load(f"{dir}/LQIG_Gains_{theta_rpm_set[i]}rpm.npz")

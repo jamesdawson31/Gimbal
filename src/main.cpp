@@ -74,9 +74,18 @@ extern "C" void app_main(void)
         printf("%d\n", err);
     }
     
-    // Initialise Gimbal
-    while (true) {
-        gimbal.update();
-        vTaskDelay(pdMS_TO_TICKS(500));
-    }
+    // Instead of running on a loop, we use a timer interrupt
+    // to trigger the update function at a fixed frequency
+
+    // Have a timer interrupt trigger a flag and nothing else during the ISR
+    // if the flag is triggered, then run the update function in the main loop.
+    // if (flag) {
+    //     gimbal.update();
+    // }
+
+    // // Initialise Gimbal
+    // while (true) {
+    //     gimbal.update();
+    //     vTaskDelay(pdMS_TO_TICKS(500));
+    // }
 }

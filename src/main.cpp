@@ -6,6 +6,7 @@
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/timer.h"       // called gptimer.h on espidf 5.x and timer.h on 4.x
 
 // Arduino libraries
 #include <Arduino.h>
@@ -13,6 +14,7 @@
 
 // Custom system libraries
 #include "Gimbal.h"
+#include "SpeedControl.h"
 #include "Motor.h"
 #include "AS5048AEncoder.h"
 #include "LSM6DSV16X_IMU.h"
@@ -42,12 +44,13 @@
 SPIBus  spi_bus_2(SPI2_HOST, PIN_SPI_MOSI, PIN_SPI_MISO, PIN_SPI_SCLK);
 LSM6DSV16X_IMU imu(PIN_SPI_IMU_CS);
 AS5048AEncoder yaw_enc(PIN_SPI_ENC_YAW_CS);
-AS5048AEncoder pitch_enc(PIN_SPI_ENC_PITCH_CS);
-AS5048AEncoder roll_enc(PIN_SPI_ENC_ROLL_CS);
+// AS5048AEncoder pitch_enc(PIN_SPI_ENC_PITCH_CS);
+// AS5048AEncoder roll_enc(PIN_SPI_ENC_ROLL_CS);
 Motor yaw_motor(PIN_MOTOR_YAW_PWM_1, PIN_MOTOR_YAW_PWM_2, PIN_MOTOR_YAW_PWM_3);
-Motor pitch_motor(PIN_MOTOR_PITCH_PWM_1, PIN_MOTOR_PITCH_PWM_2, PIN_MOTOR_PITCH_PWM_3);
-Motor roll_motor(PIN_MOTOR_ROLL_PWM_1, PIN_MOTOR_ROLL_PWM_2, PIN_MOTOR_ROLL_PWM_3);
-Gimbal gimbal(&spi_bus_2, &imu, &yaw_enc, &pitch_enc, &roll_enc);
+// Motor pitch_motor(PIN_MOTOR_PITCH_PWM_1, PIN_MOTOR_PITCH_PWM_2, PIN_MOTOR_PITCH_PWM_3);
+// Motor roll_motor(PIN_MOTOR_ROLL_PWM_1, PIN_MOTOR_ROLL_PWM_2, PIN_MOTOR_ROLL_PWM_3);
+// Gimbal gimbal(&spi_bus_2, &imu, &yaw_enc, &pitch_enc, &roll_enc);
+SpeedControl speed_control(&spi_bus_2, &yaw_enc);
 
 // -------- CAN OPTIMISE INTEGER SIZES LATER!!! --------
 
@@ -60,12 +63,12 @@ extern "C" void app_main(void)
     initArduino();
 
     // 2. Call setup and capture the result
-    esp_err_t err = gimbal.setup();
+    esp_err_t err = speed_control.setup();
 
     // 3. Evaluate the result
     if (err != ESP_OK) {
         // Use the built-in error-to-string helper for debugging
-        printf("Gimbal Setup FAILED: %s (0x%X)\n", esp_err_to_name(err), err);
+        printf("Speed Control Setup FAILED: %s (0x%X)\n", esp_err_to_name(err), err);
         
         // Safety: Don't start the PID loop if the IMU or Encoders are offline
         // abort();

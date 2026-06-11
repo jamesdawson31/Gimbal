@@ -63,6 +63,8 @@ esp_err_t Gimbal::update()
     // Get a quaternion from the IMU
     esp_err_t ret;
     ret = _imu->get_quaternion(&_q);
+
+    // Measure 
     
 
     return ESP_OK;

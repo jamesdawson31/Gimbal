@@ -120,7 +120,12 @@ def nonlinear_dynamics(t, x_full, Ka_list, L_list):       # (t, x_full, Ka_list,
     # Add gain interpolation later
     x_hat_q = np.append(x_hat, q)
     u = LQI_input(x_hat_q, Ka)
-    ud, uq = u
+
+    # Apply actuator saturation effects to ensure the control signal is physically possible
+    Vmin = -12
+    Vmax = 12
+    u_sat = np.clip(u, Vmin, Vmax)
+    ud, uq = u_sat
 
     # Compute state derivatives
     id_dot = -(Rp/Lp)*id + (1/Lp)*ud + p*theta_m_dot*iq
@@ -139,7 +144,7 @@ def nonlinear_dynamics(t, x_full, Ka_list, L_list):       # (t, x_full, Ka_list,
 
     # Kalman observer
     y_hat = C @ x_hat
-    x_hat_dot = A @ x_hat + B @ u + L @ (y - y_hat)
+    x_hat_dot = A @ x_hat + B @ u_sat + L @ (y - y_hat)
 
     # Create full derivative vector
     x_full_dot = np.concatenate((xa_dot, x_hat_dot), axis=None)

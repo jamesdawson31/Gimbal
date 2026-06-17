@@ -37,6 +37,7 @@
 #define PIN_MOTOR_ROLL_PWM_1        16
 #define PIN_MOTOR_ROLL_PWM_2        17
 #define PIN_MOTOR_ROLL_PWM_3        18
+
 // Add BMS and power management stuff later
 // #define 
 
@@ -51,6 +52,52 @@ Motor yaw_motor(PIN_MOTOR_YAW_PWM_1, PIN_MOTOR_YAW_PWM_2, PIN_MOTOR_YAW_PWM_3);
 // Motor roll_motor(PIN_MOTOR_ROLL_PWM_1, PIN_MOTOR_ROLL_PWM_2, PIN_MOTOR_ROLL_PWM_3);
 // Gimbal gimbal(&spi_bus_2, &imu, &yaw_enc, &pitch_enc, &roll_enc);
 SpeedControl speed_control(&spi_bus_2, &yaw_enc);
+
+// Interrupt setup
+volatile bool control_flag = false;
+const int divider = 80;                 // n = 80 makes every tick 1us
+const timer_group_t group = TIMER_GROUP_0;        // Use timer 0
+const timer_idx_t timer = TIMER_0;
+const timer_autoreload_t auto_reload = TIMER_AUTORELOAD_EN;          // automatically sets counter to a reload value after an alarm is triggered
+
+void IRAM_ATTR control_timer_isr(void *arg)
+{
+    control_flag = true;
+
+}
+
+void control_timer_setup(int control_loop_frequency, int divider, timer_group_t group, timer_idx_t timer, timer_autoreload_t auto_reload) 
+{
+    timer_config_t config = {
+        .divider = divider,
+        .counter_dir = TIMER_COUNT_UP,
+        .counter_en = TIMER_PAUSE,
+        .alarm_en = TIMER_ALARM_EN,
+        .auto_reload = auto_reload,
+    };
+
+    // Initialise timer
+    timer_init(group, timer, &config);
+
+    // Set auto-reload value
+    timer_set_counter_value(group, timer, 0);
+
+    // Calculate alarm value depending on target control loop frequency
+    int N = TIMER_BASE_CLK / (divider * control_loop_frequency);
+
+    // Set alarm value
+    timer_set_alarm_value(group, timer, N);
+
+    // Enable interrupt
+    timer_enable_intr(group, timer);
+
+    // Link callback function to ISR (func is the callback function)
+    timer_isr_register(group, timer, func, NULL, ESP_INTR_FLAG_IRAM, NULL);
+
+    // Start the timer
+    timer_start(group, timer);
+
+}
 
 // -------- CAN OPTIMISE INTEGER SIZES LATER!!! --------
 
@@ -82,9 +129,11 @@ extern "C" void app_main(void)
 
     // Have a timer interrupt trigger a flag and nothing else during the ISR
     // if the flag is triggered, then run the update function in the main loop.
-    // if (flag) {
-    //     gimbal.update();
-    // }
+    if (control_flag) {
+        control_flag = false;  // reset the flag
+
+        speed_control.update();
+    }
 
     // // Initialise Gimbal
     // while (true) {

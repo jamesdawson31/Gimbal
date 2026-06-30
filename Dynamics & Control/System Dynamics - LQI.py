@@ -59,7 +59,7 @@ id_max = 0.1
 iq_max = 5
 theta_m_dot_max = rpm2radps(2000)
 theta_m_max = np.inf
-q_max = 0.1
+q_max = 1
 Qa = np.diag([1/id_max**2, 1/iq_max**2, 1/theta_m_dot_max**2, 1/theta_m_max**2, 1/q_max**2])
 ud_max = 12
 uq_max = 12
@@ -81,6 +81,13 @@ V = np.diag(v)
 # Robustness parameter
 mu = 0 
 
+# Anti-windup back calculation gain
+alpha = 0.00001
+
+# Min and max values for u
+Vmin = -12
+Vmax = 12
+
 # Ka, L = design_lqig_controller(A, B, C, D, Ci, Qa, Ra, W, V, mu)
 
 # print("\nLQI Gain Matrix Ka:")
@@ -97,7 +104,7 @@ Ka_list, L_list = load_gains(theta_rpm_set, dir)
 
 # Reference parameters for simulation
 square_wave_freq = 0.5                # Frequency of reference square wave (Hz)
-square_wave_rpm = 1000                # Amplitude of reference square wave (rpm)
+square_wave_rpm = 1500                # Amplitude of reference square wave (rpm)
 
 ## Simulate dynamics
 def nonlinear_dynamics(t, x_full, Ka_list, L_list):       # (t, x_full, Ka_list, L_list):
@@ -119,12 +126,10 @@ def nonlinear_dynamics(t, x_full, Ka_list, L_list):       # (t, x_full, Ka_list,
     # Compute control input using state feedback
     # Add gain interpolation later
     x_hat_q = np.append(x_hat, q)
-    u = LQI_input(x_hat_q, Ka)
+    u_cmd = LQI_input(x_hat_q, Ka)
 
     # Apply actuator saturation effects to ensure the control signal is physically possible
-    Vmin = -12
-    Vmax = 12
-    u_sat = np.clip(u, Vmin, Vmax)
+    u_sat = np.clip(u_cmd, Vmin, Vmax)
     ud, uq = u_sat
 
     # Compute state derivatives
@@ -136,8 +141,15 @@ def nonlinear_dynamics(t, x_full, Ka_list, L_list):       # (t, x_full, Ka_list,
     x_dot = np.array([id_dot, iq_dot, theta_m_2dot, theta_m_dot]) + np.random.normal(0, w)
 
     # Integral state
-    q_dot = r_square_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat
-    # q_dot = r_sine_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat
+    K_I = Ka[:, 4]
+    Kaw = alpha * K_I.T
+    
+    anti_windup_term = Kaw @ (u_sat - u_cmd)
+    # if anti_windup_term != 0:
+    #     print(f"Anti windup term: {anti_windup_term}")
+    #     print(f"u_sat: {u_sat}")
+    # q_dot = r_square_wave(t, square_wave_freq, square_wave_rpm) - theta_m_dot_hat + anti_windup_term
+    q_dot = r_sine_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat + anti_windup_term
 
     # Augmented state derivative vector
     xa_dot = np.append(x_dot, q_dot)
@@ -163,7 +175,7 @@ x_hat_0 = xa_0[:4]
 x_0 = np.concatenate((xa_0, x_hat_0), axis=None)
 
 # Simulation time
-num_periods = 2
+num_periods = 1.5
 t_start = 0
 t_end = num_periods * (1 / square_wave_freq)
 num_points = 1000
@@ -214,8 +226,10 @@ def T_Park_inv(theta):
     ])
 
 # Record other variables for visualisation
-ud_sim = np.zeros_like(t)
-uq_sim = np.zeros_like(t)
+ud_cmd_sim = np.zeros_like(t)
+uq_cmd_sim = np.zeros_like(t)
+ud_sat_sim = np.zeros_like(t)
+uq_sat_sim = np.zeros_like(t)
 i_dq = np.column_stack((id_sim, iq_sim))
 i_abc = np.zeros((len(t), 3))
 u_abc = np.zeros((len(t), 3))
@@ -223,21 +237,21 @@ ref = np.zeros_like(t)
 
 for i in range(len(t)):
     # Reconstruct reference
-    ref[i] = r_square_wave(t[i], freq=square_wave_freq, rpm=square_wave_rpm)
-    # ref[i] = r_sine_wave(t[i], freq=square_wave_freq, rpm=square_wave_rpm)
+    # ref[i] = r_square_wave(t[i], freq=square_wave_freq, rpm=square_wave_rpm)
+    ref[i] = r_sine_wave(t[i], freq=square_wave_freq, rpm=square_wave_rpm)
 
     # Reconstruct ud and uq for visualisation
     # u_sim = u_op - K @ (sol.y[:, i] - x_op)
     Ka, L = gain_scheduling(theta_m_dot_hat_sim[i], theta_rpm_set, Ka_list, L_list, dir)
-    u_sim = LQI_input(x_hat_sim[i], Ka)
+    u_cmd_sim = LQI_input(x_hat_sim[i], Ka)
+    u_sat_sim = np.clip(u_cmd_sim, Vmin, Vmax)
 
-    # ud_sim[i] = u_sim[0]
-    # uq_sim[i] = u_sim[1]
-    ud_sim[i], uq_sim[i] = u_sim
+    ud_cmd_sim[i], uq_cmd_sim[i] = u_cmd_sim
+    ud_sat_sim[i], uq_sat_sim[i] = u_sat_sim
 
     # Inverse Clarke and Park transforms to get abc currents
     i_abc[i] = T_Clarke_inv() @ T_Park_inv(p*theta_m_sim[i]) @ np.array(i_dq[i])
-    u_abc[i] = T_Clarke_inv() @ T_Park_inv(p*theta_m_sim[i]) @ u_sim
+    u_abc[i] = T_Clarke_inv() @ T_Park_inv(p*theta_m_sim[i]) @ u_sat_sim
 
 
 # Unpack phase currents and voltages
@@ -292,7 +306,10 @@ plt.grid()
 
 # ud
 plt.subplot(4,2,5)
-plt.plot(t, ud_sim)
+plt.plot(t, ud_cmd_sim, label="Commanded ud")
+plt.plot(t, ud_sat_sim, label="Saturated ud")
+plt.axhline(y=Vmax, color="r", linestyle="--", label="Vmax")
+plt.axhline(y=Vmin, color="r", linestyle="--", label="Vmin")
 # plt.axhline(ud_op, color='r', linestyle='--', label='ud_op')
 plt.ylabel('ud (V)')
 plt.legend()
@@ -300,7 +317,10 @@ plt.grid()
 
 # uq
 plt.subplot(4,2,6)
-plt.plot(t, uq_sim)
+plt.plot(t, uq_cmd_sim, linestyle="-.", label="Commanded uq")
+plt.plot(t, uq_sat_sim, label="Saturated uq")
+plt.axhline(y=Vmax, color="r", linestyle="--", label="Vmax")
+plt.axhline(y=Vmin, color="r", linestyle="--", label="Vmin")
 # plt.axhline(uq_op, color='r', linestyle='--', label='uq_op')
 plt.ylabel('uq (V)')
 plt.legend()

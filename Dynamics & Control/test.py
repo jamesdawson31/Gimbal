@@ -55,10 +55,10 @@ from Gain_Scheduling import *
 # print(L_interp)
 
 
-a = np.arange(0, 6*np.pi+0.1, 0.1)
-b = a % (2*np.pi)
-plt.plot(a, b)
-plt.show()
+# a = np.arange(0, 6*np.pi+0.1, 0.1)
+# b = a % (2*np.pi)
+# plt.plot(a, b)
+# plt.show()
 
 # for i in range(len(theta_rpm_set)):
 #     gains = np.load(f"{dir}/LQIG_Gains_{theta_rpm_set[i]}rpm.npz")
@@ -70,3 +70,19 @@ plt.show()
 #     print(Ka)
 #     print("L:")
 #     print(L)
+
+# K = np.array([
+#     [1, 2, 3, 4, 5],
+#     [6, 7, 8, 9, 10]
+# ])
+
+# K_I = K[:, 4]
+
+# Kaw = 1 * K_I
+# u = np.array([10, 100])
+# print(Kaw @ u)
+
+u = np.array([1000, -10000])
+u_sat = np.clip(u, -12, 12)
+
+print(u_sat)

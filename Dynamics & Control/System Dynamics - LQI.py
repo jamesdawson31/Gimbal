@@ -88,12 +88,13 @@ Vmax = 12
 
 ## Create lookup table for gain scheduling (only run when parameter values change)
 theta_rpm_set = np.arange(-2500, 2501, 500)
-dir = "C:\\Users\\james.dawson\\Documents\\Projects\\Gimbal\\Dynamics & Control\\Gains"
+# dir = "C:\\Users\\james.dawson\\Documents\\Projects\\Gimbal\\Dynamics & Control\\Gains"
+dir = "./Dynamics & Control/Gains"
 # create_lookup_table(theta_rpm_set, C, D, Ci, Qa, Ra, W, V, mu, params, dir)
 Ka_list, L_list = load_gains(theta_rpm_set, dir)
 
 # Reference parameters for simulation
-square_wave_freq = 0.5                # Frequency of reference square wave (Hz)
+square_wave_freq = 1                # Frequency of reference square wave (Hz)
 square_wave_rpm = 2000                # Amplitude of reference square wave (rpm)
 
 ## Simulate dynamics
@@ -133,10 +134,14 @@ def nonlinear_dynamics(t, x_full, Ka_list, L_list):       # (t, x_full, Ka_list,
     # Conditional anti-windup
     # error = r_square_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat
     error = r_sine_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat
+
+    # If either control input is maxed in the positive direction, and the error is positive, then don't integrate the error (increase magnitude of).
     if (u_cmd[0] > Vmax or u_cmd[1] > Vmax) and error > 0:
         q_dot = 0
+    # If either control input is maxed in the negative direction, and the error is negative, then don't integrate the error (increase magnitude of).
     elif (u_cmd[0] < Vmin or u_cmd[1] < Vmin) and error < 0:
         q_dot = 0
+    # Otherwise integrate the error
     else:
         q_dot = error
 

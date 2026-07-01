@@ -81,20 +81,10 @@ V = np.diag(v)
 # Robustness parameter
 mu = 0 
 
-# Anti-windup back calculation gain
-alpha = 0.00001
-
 # Min and max values for u
 Vmin = -12
 Vmax = 12
 
-# Ka, L = design_lqig_controller(A, B, C, D, Ci, Qa, Ra, W, V, mu)
-
-# print("\nLQI Gain Matrix Ka:")
-# print(Ka)
-
-# print("\nKalman Filter Gain Matrix L:")
-# print(L)
 
 ## Create lookup table for gain scheduling (only run when parameter values change)
 theta_rpm_set = np.arange(-2500, 2501, 500)
@@ -104,7 +94,7 @@ Ka_list, L_list = load_gains(theta_rpm_set, dir)
 
 # Reference parameters for simulation
 square_wave_freq = 0.5                # Frequency of reference square wave (Hz)
-square_wave_rpm = 1500                # Amplitude of reference square wave (rpm)
+square_wave_rpm = 2000                # Amplitude of reference square wave (rpm)
 
 ## Simulate dynamics
 def nonlinear_dynamics(t, x_full, Ka_list, L_list):       # (t, x_full, Ka_list, L_list):
@@ -139,17 +129,16 @@ def nonlinear_dynamics(t, x_full, Ka_list, L_list):       # (t, x_full, Ka_list,
     
     # Add process noise (uncertainty in the model)
     x_dot = np.array([id_dot, iq_dot, theta_m_2dot, theta_m_dot]) + np.random.normal(0, w)
-
-    # Integral state
-    K_I = Ka[:, 4]
-    Kaw = alpha * K_I.T
     
-    anti_windup_term = Kaw @ (u_sat - u_cmd)
-    # if anti_windup_term != 0:
-    #     print(f"Anti windup term: {anti_windup_term}")
-    #     print(f"u_sat: {u_sat}")
-    # q_dot = r_square_wave(t, square_wave_freq, square_wave_rpm) - theta_m_dot_hat + anti_windup_term
-    q_dot = r_sine_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat + anti_windup_term
+    # Conditional anti-windup
+    # error = r_square_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat
+    error = r_sine_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat
+    if (u_cmd[0] > Vmax or u_cmd[1] > Vmax) and error > 0:
+        q_dot = 0
+    elif (u_cmd[0] < Vmin or u_cmd[1] < Vmin) and error < 0:
+        q_dot = 0
+    else:
+        q_dot = error
 
     # Augmented state derivative vector
     xa_dot = np.append(x_dot, q_dot)
@@ -189,7 +178,6 @@ sol = solve_ivp(
     args=(Ka_list, L_list),
     method='RK45'
 )
-#t_eval=t_eval,
 
 # Unpack results
 t = sol.t
@@ -197,33 +185,6 @@ id_sim, iq_sim, theta_m_dot_sim, theta_m_sim, q_sim, \
     id_hat_sim, iq_hat_sim, theta_m_dot_hat_sim, theta_m_hat_sim = sol.y
 
 x_hat_sim = np.array([id_hat_sim, iq_hat_sim, theta_m_dot_hat_sim, theta_m_hat_sim, q_sim]).T
-
-## Convert back to the abc frame for visualisation
-# Define transformation matrices for Clarke and Park transforms
-def T_Clarke():
-    return (2/3) * np.array([
-        [1, -0.5, -0.5],
-        [0, np.sqrt(3)/2, -np.sqrt(3)/2]
-    ])
-
-def T_Clarke_inv():
-    return np.array([
-        [1, 0],
-        [-0.5,  np.sqrt(3)/2],
-        [-0.5, -np.sqrt(3)/2]
-    ])
-
-def T_Park(theta):
-    return np.array([
-        [np.cos(theta), np.sin(theta)],
-        [-np.sin(theta), np.cos(theta)]
-    ])
-
-def T_Park_inv(theta):
-    return np.array([
-        [np.cos(theta), -np.sin(theta)],
-        [np.sin(theta),  np.cos(theta)]
-    ])
 
 # Record other variables for visualisation
 ud_cmd_sim = np.zeros_like(t)

@@ -82,7 +82,13 @@ from Gain_Scheduling import *
 # u = np.array([10, 100])
 # print(Kaw @ u)
 
-u = np.array([1000, -10000])
-u_sat = np.clip(u, -12, 12)
+# u = np.array([1000, -10000])
+# u_sat = np.clip(u, -12, 12)
 
-print(u_sat)
+# print(u_sat)
+
+a = 9.1234
+
+# b = a % 1
+b = 18 % 4
+print(b)

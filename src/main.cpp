@@ -8,6 +8,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/timer.h"       // called gptimer.h on espidf 5.x and timer.h on 4.x
+#include "driver/gpio.h"
 
 // Arduino libraries
 #include <Arduino.h>
@@ -57,10 +58,6 @@ SpeedControl speed_control(&spi_bus_2, &yaw_enc);
 // Interrupt setup
 // volatile bool control_flag = false;
 volatile int control_ticks = 0;
-const int divider = 80;                 // n = 80 makes every tick 1us
-const timer_group_t group = TIMER_GROUP_0;        // Use timer 0
-const timer_idx_t timer = TIMER_0;
-const timer_autoreload_t auto_reload = TIMER_AUTORELOAD_EN;          // automatically sets counter to a reload value after an alarm is triggered
 
 bool IRAM_ATTR control_timer_isr(void *arg)
 {
@@ -111,6 +108,18 @@ void control_timer_setup(int control_loop_frequency, uint32_t divider, timer_gro
 
 }
 
+void gpio_setup(int pin, gpio_mode_t io_mode) {
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << pin),
+        .mode = io_mode,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+
+    gpio_config(&io_conf);
+}
+
 // -------- CAN OPTIMISE INTEGER SIZES LATER!!! --------
 
 // Main
@@ -123,12 +132,15 @@ extern "C" void app_main(void)
 
     // Setup interrupt timer
     int control_loop_frequency = 1;                         // Hz
+    uint32_t divider = 80;
     timer_group_t group = TIMER_GROUP_0;
     timer_idx_t timer = TIMER_0;
-    timer_autoreload_t auto_reload = TIMER_AUTORELOAD_EN;
-    uint32_t divider = 80;
-
+    timer_autoreload_t auto_reload = TIMER_AUTORELOAD_EN;    
     control_timer_setup(control_loop_frequency, divider, group, timer, auto_reload);
+
+    // Setup GPIO
+    const gpio_num_t led_pin = GPIO_NUM_15;
+    gpio_setup(led_pin, GPIO_MODE_OUTPUT);
 
     // 2. Call setup and capture the result
     esp_err_t err = speed_control.setup();
@@ -144,17 +156,11 @@ extern "C" void app_main(void)
     else {
         printf("%d\n", err);
     }
-    
-    // Instead of running on a loop, we use a timer interrupt
-    // to trigger the update function at a fixed frequency
 
-    // Have a timer interrupt trigger a flag and nothing else during the ISR
-    // if the flag is triggered, then run the update function in the main loop.
-    // if (control_flag) {
-    //     control_flag = false;  // reset the flag
-
-    //     speed_control.update();
-    // }
+    // Interrupt triggers execution of control loop code inside the main loop
+    // rather than everything inside the ISR.
+    volatile int control_ticks = 0;
+    bool led_on = false;
     while (true) {
         // control_ticks will count the number of missed events
         if (control_ticks > 0) {
@@ -162,12 +168,15 @@ extern "C" void app_main(void)
 
             // Update the state of the system
             speed_control.update();
+
+            // Test by blinking an LED
+            led_on = !led_on;
+            if (led_on) {
+                gpio_set_level(led_pin, 1);     // Set GPIO high
+            }
+            else {
+                gpio_set_level(led_pin, 0);     // Set GPIO low
+            }
         }
     }
-
-    // // Initialise Gimbal
-    // while (true) {
-    //     gimbal.update();
-    //     vTaskDelay(pdMS_TO_TICKS(500));
-    // }
 }

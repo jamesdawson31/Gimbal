@@ -26,7 +26,7 @@ class LSM6DSV16X_IMU : public SPIDevice
         // Public attributes
         LSM6DSV16X_IMU(int cs_pin);
         esp_err_t begin(spi_host_device_t spi_bus) override;
-        esp_err_t get_quaternion(Quaternion *q);
+        esp_err_t update_quaternion(Quaternion *q);
         
     private:
         // Private attributes

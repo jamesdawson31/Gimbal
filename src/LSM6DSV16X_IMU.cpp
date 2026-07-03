@@ -248,7 +248,7 @@ esp_err_t LSM6DSV16X_IMU::begin(spi_host_device_t spi_host)
     return ESP_OK;
 }
 
-esp_err_t LSM6DSV16X_IMU::get_quaternion(Quaternion *q)
+esp_err_t LSM6DSV16X_IMU::update_quaternion(Quaternion *q)
 {
     // Read FIFO registers for quaternion data
     uint8_t raw_quaternion[7];

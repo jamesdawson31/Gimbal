@@ -46,7 +46,7 @@ esp_err_t LSM6DSV16X_IMU::write_reg(uint8_t reg_address, uint8_t *data, size_t l
     spi_transaction_t t = {};
     t.length = 8 * (len + 1);     
     t.tx_buffer = tx_buf;
-    t.rx_buffer = nullptr;        
+    t.rx_buffer = nullptr;       
 
     // 4. Execute the transfer
     return spi_device_transmit(_spi_handle, &t);
@@ -87,108 +87,88 @@ esp_err_t LSM6DSV16X_IMU::read_reg(uint8_t reg_address, uint8_t *receive, size_t
 
 esp_err_t LSM6DSV16X_IMU::enable_SFLP()
 {
-    esp_err_t ret;
-
     // 1. Enable accelerometer register at 480Hz
-    ret = write_reg(Regs::CTRL1, 0b00001000);
-    if (ret == ESP_OK) {
-        ESP_LOGE(TAG, "Set accelerometer data rate 480Hz!");
-    }
-    else {
-        ESP_LOGE(TAG, "Failed to set accelerometer data rate!");
-        return ret;
-    }
+    ESP_RETURN_ON_ERROR(
+        write_reg(Regs::CTRL1, 0b00001000),
+        TAG,
+        "Failed to set accelerometer data rate!"
+    );
+    ESP_LOGI(TAG, "Set accelerometer data rate to 480Hz!");
 
     // 2. Enable gyroscope register at 480Hz
-    ret = write_reg(Regs::CTRL2, 0b00001000);
-    if (ret == ESP_OK) {
-        ESP_LOGE(TAG, "Set gyroscope data rate 480Hz!");
-    }
-    else {
-        ESP_LOGE(TAG, "Failed to set gyroscope data rate!");
-        return ret;
-    }
+    ESP_RETURN_ON_ERROR(
+        write_reg(Regs::CTRL2, 0b00001000),
+        TAG,
+        "Failed to set gyroscope data rate!"
+    );
+    ESP_LOGI(TAG, "Set gyroscope data rate to 480Hz!");
 
-    // 3. Point to embedded functions memory bank
-    ret = write_reg(Regs::FUNC_CFG_ACCESS, 0b10000000);
-    if (ret == ESP_OK) {
-        ESP_LOGE(TAG, "Successfully enabled embedded functions registers!");
-    }
-    else {
-        ESP_LOGE(TAG, "Failed to enable embedded functions registers!");
-        return ret;
-    }
+    // 3. Point to embedded functions memory bank (enable embedded functions)
+    ESP_RETURN_ON_ERROR(
+        write_reg(Regs::FUNC_CFG_ACCESS, 0b10000000),
+        TAG,
+        "Failed to enable embedded functions registers!"
+    );
+    ESP_LOGI(TAG, "Successfully enabled embedded functions registers!");
 
     // 4. Enable SFLP game vector
-    ret = write_reg(Regs::EMB_FUNC_EN_A, 0b00000010);
-    if (ret == ESP_OK) {
-        ESP_LOGE(TAG, "Successfully enabled SFLP game vector!");
-    }
-    else {
-        ESP_LOGE(TAG, "Failed to enable SFLP game vector!");
-        return ret;
-    }
+    ESP_RETURN_ON_ERROR(
+        write_reg(Regs::EMB_FUNC_EN_A, 0b00000010),
+        TAG,
+        "Failed to enable SFLP game vector!"
+    );
+    ESP_LOGI(TAG, "Successfully enabled SFLP game vector!");
 
     // 5. Configure SFLP data rate to 480Hz
-    ret = write_reg(Regs::SFLP_ODR, 0b01101011);
-    if (ret == ESP_OK) {
-        ESP_LOGE(TAG, "Successfully set SFLP data rate to 480Hz!");
-    }
-    else {
-        ESP_LOGE(TAG, "Failed to enable SFLP game vector!");
-        return ret;
-    }
+    ESP_RETURN_ON_ERROR(
+        write_reg(Regs::SFLP_ODR, 0b01101011),
+        TAG,
+        "Failed to enable SFLP game vector!"
+    );
+    ESP_LOGI(TAG, "Successfully set SFLP data rate to 480Hz!");
 
     // 6. Enable batching of SFLP data to the FIFO
-    ret = write_reg(Regs::EMB_FUNC_FIFO_EN_A, 0b00000010);
-    if (ret == ESP_OK) {
-        ESP_LOGE(TAG, "Successfully enabled batching of SFLP to the FIFO!");
-    }
-    else {
-        ESP_LOGE(TAG, "Failed to enable batching of SFLP to the FIFO!");
-        return ret;
-    }
+    ESP_RETURN_ON_ERROR(
+        write_reg(Regs::EMB_FUNC_FIFO_EN_A, 0b00000010),
+        TAG,
+        "Failed to enable batching of SFLP to the FIFO!"
+    );
+    ESP_LOGI(TAG, "Successfully enabled batching of SFLP to the FIFO!");
 
     // 7. Point back to default memory bank so we can access the FIFO registers
-    ret = write_reg(Regs::FUNC_CFG_ACCESS, 0b00000000);
-    if (ret == ESP_OK) {
-        ESP_LOGE(TAG, "Successfully disabled embedded functions registers!");
-    }
-    else {
-        ESP_LOGE(TAG, "Failed to disable embedded functions registers!");
-        return ret;
-    }
+    ESP_RETURN_ON_ERROR(
+        write_reg(Regs::FUNC_CFG_ACCESS, 0b00000000),
+        TAG,
+        "Failed to disable embedded functions registers!"
+    );
+    ESP_LOGI(TAG, "Successfully disabled embedded functions registers!");
 
     // 8. Enable continuous mode for the FIFO
-    ret = write_reg(Regs::FIFO_CTRL4, 0b00000110);
-    if (ret == ESP_OK) {
-        ESP_LOGE(TAG, "Successfully enabled continuous mode for the FIFO!");
-    }
-    else {
-        ESP_LOGE(TAG, "Failed to enable continuous mode for the FIFO!");
-        return ret;
-    }
+    ESP_RETURN_ON_ERROR(
+        write_reg(Regs::FIFO_CTRL4, 0b00000110),
+        TAG,
+        "Failed to enable continuous mode for the FIFO!"
+    );
+    ESP_LOGI(TAG, "Successfully enabled continuous mode for the FIFO!");
 
     // Check FIFO registers for SFLP game rotation vector (returns 0x13)
     uint8_t FIFO_tag;
-    ret = read_reg(Regs::FIFO_DATA_OUT_TAG, &FIFO_tag);
+    ESP_RETURN_ON_ERROR(
+        read_reg(Regs::FIFO_DATA_OUT_TAG, &FIFO_tag),
+        TAG,
+        "Failed to request the FIFO tag!"
+    );
+    ESP_LOGI(TAG, "Successfully requested the FIFO tag!");
 
-    if (ret == ESP_OK) {
-        ESP_LOGE(TAG, "Successfully requested the FIFO tag!");
-        uint8_t sensor_tag = (FIFO_tag & 0b11111000) >> 3;
-
-        if (sensor_tag == 0x13) {
-            ESP_LOGI(TAG, "FIFO tag detected! ID: 0x%02X", sensor_tag);
-        }
-        else {
-            ESP_LOGE(TAG, "FIFO tag mismatch! Expected 0x13, got 0x%02X", sensor_tag);
-            return ESP_ERR_NOT_FOUND;
-        }
+    uint8_t sensor_tag = (FIFO_tag & 0b11111000) >> 3;
+    if (sensor_tag != 0x13) {
+        ESP_RETURN_ON_ERROR(
+            ESP_FAIL,
+            TAG,
+            "FIFO tag mismatch! Expected 0x13, got 0x%02X", sensor_tag
+        );
     }
-    else {
-        ESP_LOGE(TAG, "Failed to request the FIFO tag!");
-        return ret;
-    }
+    ESP_LOGI(TAG, "FIFO tag detected! ID: 0x%02X", sensor_tag);
 
     return ESP_OK;
 }
@@ -204,45 +184,40 @@ esp_err_t LSM6DSV16X_IMU::begin(spi_host_device_t spi_host)
     devcfg.queue_size = 7;
 
     // Adding IMU to the SPI bus
-    esp_err_t ret = spi_bus_add_device(spi_host, &devcfg, &_spi_handle);
-    if (ret == ESP_OK) {
-        ESP_LOGE(TAG, "Successfully added to the SPI bus.");
-    }
-    else {
-        ESP_LOGE(TAG, "Could not be added to the SPI bus!");
-        return ret;
-    }
+    ESP_RETURN_ON_ERROR(
+        spi_bus_add_device(spi_host, &devcfg, &_spi_handle),
+        TAG,
+        "Failed to read register %x", Regs::FIFO_DATA_OUT_TAG
+    );
+    ESP_LOGI(TAG, "Successfully added to the SPI bus.");
     
     // Read the IMU's ID
     uint8_t IMU_id;
-    ret = read_reg(Regs::WHO_AM_I, &IMU_id);
-
-    if (ret == ESP_OK) {
-        ESP_LOGE(TAG, "Successfully transmitted device ID message!");
-    }
-    else {
-        ESP_LOGE(TAG, "Failed to request the device ID!");
-        return ret;
-    }
+    ESP_RETURN_ON_ERROR(
+        read_reg(Regs::WHO_AM_I, &IMU_id),
+        TAG,
+        "Failed to request the device ID."
+    );
+    ESP_LOGI(TAG, "Successfully read the device ID.");
 
     // Check the value of the ID
-    if (IMU_id == 0x70) { 
-        ESP_LOGI(TAG, "LSM6DSV16X detected! ID: 0x%02X", IMU_id);
+    if (IMU_id != 0x70) {
+        ESP_RETURN_ON_ERROR(
+            ESP_FAIL,
+            TAG,
+            "Device mismatch! Expected 0x70, got 0x%02X", IMU_id
+        );
     }
-    else {
-        ESP_LOGE(TAG, "Device mismatch! Expected 0x70, got 0x%02X", IMU_id);
-        return ESP_ERR_NOT_FOUND;
-    }
+    ESP_LOGI(TAG, "LSM6DSV16X detected! ID: 0x%02X", IMU_id);
+
 
     // Enable quaternion game vector
-    ret = enable_SFLP();
-    if (ret == ESP_OK) {
-        ESP_LOGE(TAG, "Successfully completed SFLP game vector setup!");
-    }
-    else {
-        ESP_LOGE(TAG, "Failed to setup SFLP game vector!");
-        return ret;
-    }
+    ESP_RETURN_ON_ERROR(
+        enable_SFLP(),
+        TAG,
+        "Failed to setup SFLP game vector!"
+    );
+    ESP_LOGI(TAG, "Successfully completed SFLP game vector setup!");
 
     // If passed all checks, return OK status
     return ESP_OK;
@@ -252,21 +227,23 @@ esp_err_t LSM6DSV16X_IMU::update_quaternion(Quaternion *q)
 {
     // Read FIFO registers for quaternion data
     uint8_t raw_quaternion[7];
-    esp_err_t ret = read_reg(Regs::FIFO_DATA_OUT_TAG, raw_quaternion, sizeof(raw_quaternion));
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "sensor read failed!");
-        return ret;
-    }
-    
-    uint8_t sensor_tag = (raw_quaternion[0] & 0b11111000) >> 3;
+    ESP_RETURN_ON_ERROR(
+        read_reg(Regs::FIFO_DATA_OUT_TAG, raw_quaternion, sizeof(raw_quaternion)),
+        TAG,
+        "Failed to read register %x", Regs::FIFO_DATA_OUT_TAG
+    );
 
     // If the SFLP tag isn't for a quaternion, then return an error
+    uint8_t sensor_tag = (raw_quaternion[0] & 0b11111000) >> 3;
     if (sensor_tag != 0x13) {
-        ESP_LOGE(TAG, "Wrong sensor tag detected! Detected 0x%x when it should be 0x13!", sensor_tag);
-        return ESP_FAIL;
+        ESP_RETURN_ON_ERROR(
+            ESP_FAIL,
+            TAG,
+            "Wrong sensor tag detected! Detected 0x%x when it should be 0x13!", sensor_tag
+        );
     }
 
-// 1. Reconstruct the 16-bit words (Little Endian)
+    // 1. Reconstruct the 16-bit words (Little Endian)
     uint16_t raw_x = (raw_quaternion[2] << 8) | raw_quaternion[1];
     uint16_t raw_y = (raw_quaternion[4] << 8) | raw_quaternion[3];
     uint16_t raw_z = (raw_quaternion[6] << 8) | raw_quaternion[5];
@@ -285,23 +262,3 @@ esp_err_t LSM6DSV16X_IMU::update_quaternion(Quaternion *q)
 
     return ESP_OK;
 }
-
-
-    // check the SFLP game vector register to see if the value was changed
-    // uint8_t sflp_value;
-    // ret = read_reg(Regs::EMB_FUNC_EN_A, &sflp_value);
-    // if (ret == ESP_OK) {
-    //     ESP_LOGE(TAG, "Successfully read the SFLP register!");
-
-    //     if (sflp_value == 0b00000010) {
-    //         ESP_LOGI(TAG, "SFLP enabled! Register: 0x%02X", sflp_value);
-    //     }
-    //     else {
-    //         ESP_LOGE(TAG, "SFLP not enabled! Register: 0x%02X", sflp_value);
-    //         return ESP_ERR_NOT_FOUND;
-    //     }
-    // }
-    // else {
-    //     ESP_LOGE(TAG, "Failed to disable embedded functions registers!");
-    //     return ret;
-    // }

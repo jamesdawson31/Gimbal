@@ -2,6 +2,8 @@
 
 #include "driver/spi_master.h"
 
+static const char* TAG = "SPI_BUS";
+
 bool SPIBus::_is_initialised = false;
 
 SPIBus::SPIBus(spi_host_device_t spi_host, int mosi, int miso, int sclk) 
@@ -34,5 +36,27 @@ esp_err_t SPIBus::initialise() {
     buscfg.quadhd_io_num = -1;
     buscfg.max_transfer_sz = 4092;
 
-    return spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    ESP_RETURN_ON_ERROR(
+        spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO),
+        TAG,
+        "SPI bus initialization failed"
+    );
+    ESP_LOGI(TAG, "Set gyroscope data rate to 480Hz!");
+
+    return ESP_OK;
+}
+
+const char* SPIBus::spi_host_to_string(spi_host_device_t host) {
+    switch (host) {
+        case SPI1_HOST: 
+            return "SPI1_HOST";
+        case SPI2_HOST: 
+            return "SPI2_HOST";
+#ifdef SPI3_HOST
+        case SPI3_HOST: 
+            return "SPI3_HOST";
+#endif
+        default: 
+            return "UNKNOWN";
+    }
 }

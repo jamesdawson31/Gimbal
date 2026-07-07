@@ -27,7 +27,7 @@ esp_err_t Gimbal::setup()
         return ESP_FAIL;
     }
     else {
-        ESP_LOGE(TAG, "SPI Bus successfully initialised!");
+        ESP_LOGI(TAG, "SPI Bus successfully initialised!");
     }
     spi_host_device_t spi_host = _spi_bus->get_host();
 
@@ -37,7 +37,7 @@ esp_err_t Gimbal::setup()
         return ESP_FAIL;
     }
     else {
-        ESP_LOGE(TAG, "IMU successfully initialised!");
+        ESP_LOGI(TAG, "IMU successfully initialised!");
     }
     
 

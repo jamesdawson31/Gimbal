@@ -4,6 +4,7 @@
 #include "driver/spi_master.h"
 #include "SPIDevice.h"
 #include <math.h>
+#include "esp_check.h"
 
 // bit 0: READ bit. The value is 1.
 // bit 1-7: address AD(6:0). This is the address field of the indexed register.

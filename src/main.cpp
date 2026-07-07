@@ -40,6 +40,9 @@
 #define PIN_MOTOR_ROLL_PWM_2        17
 #define PIN_MOTOR_ROLL_PWM_3        18
 
+
+static const char* TAG = "MAIN";
+
 // Add BMS and power management stuff later
 // #define 
 
@@ -76,8 +79,9 @@ bool IRAM_ATTR control_timer_isr(void *arg)
     return false;
 }
 
-void control_timer_setup(int control_loop_frequency, uint32_t divider, timer_group_t group, timer_idx_t timer, timer_autoreload_t auto_reload) 
+esp_err_t control_timer_setup(int control_loop_frequency, uint32_t divider, timer_group_t group, timer_idx_t timer, timer_autoreload_t auto_reload) 
 {
+    printf("Hi\n");
     timer_config_t config = {
         .alarm_en = TIMER_ALARM_EN,
         .counter_en = TIMER_PAUSE,
@@ -95,6 +99,7 @@ void control_timer_setup(int control_loop_frequency, uint32_t divider, timer_gro
 
     // Calculate alarm value depending on target control loop frequency
     float N = TIMER_BASE_CLK / (divider * control_loop_frequency);
+    printf("N = %f\n", N);
     int N_floor = floor(N);
     if (N - N_floor != 0) {
         printf("\nN = %f is not an integer and has been rounded to %d.\n", N, N_floor);
@@ -114,10 +119,9 @@ void control_timer_setup(int control_loop_frequency, uint32_t divider, timer_gro
 
     // Start the timer
     timer_start(group, timer);
-
 }
 
-void gpio_setup(int pin, gpio_mode_t io_mode) {
+esp_err_t gpio_setup(int pin, gpio_mode_t io_mode) {
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << pin),
         .mode = io_mode,
@@ -134,35 +138,34 @@ void gpio_setup(int pin, gpio_mode_t io_mode) {
 // Main
 extern "C" void app_main(void) 
 {
+    printf("\n\n======== System Setup ========\n");
+    esp_err_t flag;
+
     // Initialise Arduino for SimpleFOC
     initArduino();
 
+    // Initial delay of 1s to startup
+    vTaskDelay(pdMS_TO_TICKS(2000));
+
     // Setup interrupt timer
     x_task_to_notify = xTaskGetCurrentTaskHandle();
-    int control_loop_frequency = 1;                         // Hz
+    int control_loop_frequency = 7;                         // Hz
     uint32_t divider = 80;
     timer_group_t group = TIMER_GROUP_0;
     timer_idx_t timer = TIMER_0;
-    timer_autoreload_t auto_reload = TIMER_AUTORELOAD_EN;    
+    timer_autoreload_t auto_reload = TIMER_AUTORELOAD_EN;
     control_timer_setup(control_loop_frequency, divider, group, timer, auto_reload);
 
     // Setup GPIO
     const gpio_num_t led_pin = GPIO_NUM_15;
     gpio_setup(led_pin, GPIO_MODE_OUTPUT);
 
-    // 2. Call setup and capture the result
-    esp_err_t err = speed_control.setup();
-
-    // 3. Evaluate the result
-    if (err != ESP_OK) {
+    // Setup speed control system
+    flag = speed_control.setup();
+    if (flag != ESP_OK) {
         // Use the built-in error-to-string helper for debugging
-        printf("Speed Control Setup FAILED: %s (0x%X)\n", esp_err_to_name(err), err);
-        
-        // Safety: Don't start the PID loop if the IMU or Encoders are offline
-        // abort();
-    }
-    else {
-        printf("%d\n", err);
+        ESP_LOGE(TAG, "System Setup FAILED\n");
+        abort();
     }
 
     // Interrupt triggers execution of control loop code inside the main loop
@@ -175,6 +178,7 @@ extern "C" void app_main(void)
 
         // Update the state of the system
         speed_control.update();
+        // printf("Hello\n");
 
         // Test by blinking an LED
         led_on = !led_on;

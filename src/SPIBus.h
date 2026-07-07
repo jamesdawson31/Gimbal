@@ -3,6 +3,7 @@
 
 #include "driver/spi_master.h"
 #include "esp_log.h"
+#include "esp_check.h"
 
 class SPIBus {
     public:
@@ -20,6 +21,9 @@ class SPIBus {
     private:
         // Specific ESP32 SPI bus
         spi_host_device_t _spi_host;
+
+        // Methods
+        const char* spi_host_to_string(spi_host_device_t host);
     
         // Pins that belong to an SPI bus
         int _mosi;

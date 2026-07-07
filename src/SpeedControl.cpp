@@ -10,19 +10,17 @@ SpeedControl::SpeedControl(SPIBus* spi_bus, AS5048AEncoder* encoder)
 
 esp_err_t SpeedControl::setup() 
 {
-    // Initial delay of 1s to startup
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    printf("\n\n======== System Booting ========\n");
-
     // Initialise SPIBus
-    if (_spi_bus->initialise() != ESP_OK) {
-        ESP_LOGE(TAG, "SPI Bus failed to initialise!");
-        return ESP_FAIL;
-    }
-    else {
-        ESP_LOGE(TAG, "SPI Bus successfully initialised!");
-    }
-    spi_host_device_t spi_host = _spi_bus->get_host();
+    ESP_RETURN_ON_ERROR(
+        _spi_bus->initialise(),
+        TAG,
+        "Speed control setup FAILED"
+    );
+
+    // spi_host_device_t spi_host = _spi_bus->get_host();
+
+    // Setup encoder
+    
 
 
     return ESP_OK;          // placeholder!

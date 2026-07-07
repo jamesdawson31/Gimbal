@@ -5,6 +5,7 @@
 
 // ESP32 libraries
 #include "esp_err.h"
+#include "esp_check.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/timer.h"       // called gptimer.h on espidf 5.x and timer.h on 4.x
@@ -79,9 +80,8 @@ bool IRAM_ATTR control_timer_isr(void *arg)
     return false;
 }
 
-esp_err_t control_timer_setup(int control_loop_frequency, uint32_t divider, timer_group_t group, timer_idx_t timer, timer_autoreload_t auto_reload) 
+void control_timer_setup(int control_loop_frequency, uint32_t divider, timer_group_t group, timer_idx_t timer, timer_autoreload_t auto_reload) 
 {
-    printf("Hi\n");
     timer_config_t config = {
         .alarm_en = TIMER_ALARM_EN,
         .counter_en = TIMER_PAUSE,
@@ -99,12 +99,12 @@ esp_err_t control_timer_setup(int control_loop_frequency, uint32_t divider, time
 
     // Calculate alarm value depending on target control loop frequency
     float N = TIMER_BASE_CLK / (divider * control_loop_frequency);
-    printf("N = %f\n", N);
+    // printf("N = %f\n", N);
     int N_floor = floor(N);
     if (N - N_floor != 0) {
         printf("\nN = %f is not an integer and has been rounded to %d.\n", N, N_floor);
         float new_control_loop_frequency = N * divider / TIMER_BASE_CLK;
-        printf("This leads to an adjusted control loop frequency of %f.", new_control_loop_frequency);
+        printf("This leads to an adjusted control loop frequency of %f.\n", new_control_loop_frequency);
     }
 
     // Set alarm value
@@ -121,7 +121,7 @@ esp_err_t control_timer_setup(int control_loop_frequency, uint32_t divider, time
     timer_start(group, timer);
 }
 
-esp_err_t gpio_setup(int pin, gpio_mode_t io_mode) {
+void gpio_setup(int pin, gpio_mode_t io_mode) {
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << pin),
         .mode = io_mode,
@@ -136,20 +136,20 @@ esp_err_t gpio_setup(int pin, gpio_mode_t io_mode) {
 // -------- CAN OPTIMISE INTEGER SIZES LATER!!! --------
 
 // Main
-extern "C" void app_main(void) 
+extern "C" esp_err_t app_main(void) 
 {
+    // Initial delay of 1s to startup
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
     printf("\n\n======== System Setup ========\n");
-    esp_err_t flag;
+    // esp_err_t flag;
 
     // Initialise Arduino for SimpleFOC
     initArduino();
-
-    // Initial delay of 1s to startup
-    vTaskDelay(pdMS_TO_TICKS(2000));
-
+    
     // Setup interrupt timer
     x_task_to_notify = xTaskGetCurrentTaskHandle();
-    int control_loop_frequency = 7;                         // Hz
+    int control_loop_frequency = 1;                         // Hz
     uint32_t divider = 80;
     timer_group_t group = TIMER_GROUP_0;
     timer_idx_t timer = TIMER_0;
@@ -161,12 +161,12 @@ extern "C" void app_main(void)
     gpio_setup(led_pin, GPIO_MODE_OUTPUT);
 
     // Setup speed control system
-    flag = speed_control.setup();
-    if (flag != ESP_OK) {
-        // Use the built-in error-to-string helper for debugging
-        ESP_LOGE(TAG, "System Setup FAILED\n");
-        abort();
-    }
+    ESP_RETURN_ON_ERROR(
+        speed_control.setup(),
+        TAG,
+        "System setup failed."
+    );
+    ESP_LOGI(TAG, "Speed controller setup.");
 
     // Interrupt triggers execution of control loop code inside the main loop
     // rather than everything inside the ISR.

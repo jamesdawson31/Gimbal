@@ -57,12 +57,21 @@ SpeedControl speed_control(&spi_bus_2, &yaw_enc);
 
 // Interrupt setup
 // volatile bool control_flag = false;
-volatile int control_ticks = 0;
+static TaskHandle_t x_task_to_notify;
+volatile uint32_t control_ticks = 0;
+
+// bool IRAM_ATTR control_timer_isr(void *arg)
+// {
+//     control_ticks++;
+
+//     return false;
+// }
 
 bool IRAM_ATTR control_timer_isr(void *arg)
 {
-    // control_flag = true;
-    control_ticks++;
+    BaseType_t higher_priority_task_woken = pdFALSE;
+
+    vTaskNotifyGiveFromISR(x_task_to_notify, &higher_priority_task_woken);
 
     return false;
 }
@@ -94,7 +103,7 @@ void control_timer_setup(int control_loop_frequency, uint32_t divider, timer_gro
     }
 
     // Set alarm value
-    timer_set_alarm_value(group, timer, N);
+    timer_set_alarm_value(group, timer, N_floor);
 
     // Enable interrupt
     timer_enable_intr(group, timer);
@@ -125,12 +134,11 @@ void gpio_setup(int pin, gpio_mode_t io_mode) {
 // Main
 extern "C" void app_main(void) 
 {
-    // This tells the C++ compiler: 
-    // "Don't mangle this name. Keep it exactly as it is (C-style)."
-
+    // Initialise Arduino for SimpleFOC
     initArduino();
 
     // Setup interrupt timer
+    x_task_to_notify = xTaskGetCurrentTaskHandle();
     int control_loop_frequency = 1;                         // Hz
     uint32_t divider = 80;
     timer_group_t group = TIMER_GROUP_0;
@@ -159,24 +167,41 @@ extern "C" void app_main(void)
 
     // Interrupt triggers execution of control loop code inside the main loop
     // rather than everything inside the ISR.
-    volatile int control_ticks = 0;
     bool led_on = false;
+
     while (true) {
-        // control_ticks will count the number of missed events
-        if (control_ticks > 0) {
-            control_ticks--;
+        // No task handle necessary because it is only ever waiting on one task at a time
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-            // Update the state of the system
-            speed_control.update();
+        // Update the state of the system
+        speed_control.update();
 
-            // Test by blinking an LED
-            led_on = !led_on;
-            if (led_on) {
-                gpio_set_level(led_pin, 1);     // Set GPIO high
-            }
-            else {
-                gpio_set_level(led_pin, 0);     // Set GPIO low
-            }
+        // Test by blinking an LED
+        led_on = !led_on;
+        if (led_on) {
+            gpio_set_level(led_pin, 1);     // Set GPIO high
+        }
+        else {
+            gpio_set_level(led_pin, 0);     // Set GPIO low
         }
     }
 }
+
+    // while (true) {
+    //     // control_ticks will count the number of missed events
+    //     if (control_ticks > 0) {
+    //         control_ticks--;
+
+    //         // Update the state of the system
+    //         speed_control.update();
+
+    //         // Test by blinking an LED
+    //         led_on = !led_on;
+    //         if (led_on) {
+    //             gpio_set_level(led_pin, 1);     // Set GPIO high
+    //         }
+    //         else {
+    //             gpio_set_level(led_pin, 0);     // Set GPIO low
+    //         }
+    //     }
+    // }

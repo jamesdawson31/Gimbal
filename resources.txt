@@ -1,0 +1,8 @@
+Sensorless FOC and how to measure phase inductance and resistance.
+https://docs.simplefoc.com/sensorless_foc_nucleo_example
+
+Needs 2 current sensors
+https://www.aliexpress.com/item/1005005664394287.html?src=google
+- place 1 on phase A and 1 on phase B, then calculate phase C current
+- Will need 6 for full gimbal
+

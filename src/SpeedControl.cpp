@@ -27,3 +27,37 @@ esp_err_t SpeedControl::setup()
 
     return ESP_OK;          // placeholder!
 }
+
+esp_err_t SpeedControl::update()
+{
+    // Measure current in phases A and B
+
+
+    // Calculate current in phase C
+
+
+    // Measure motor position
+
+
+    // Interpolate gains Ka and L using speed estimate
+
+
+    // Compute control input using state estimates
+
+
+    // Apply actuator limits to clip the voltage range for Ua, Ub, Uc
+
+
+    // Conditional anti-windup
+
+
+    // Compute new state estimates using Kalman observer
+
+
+    
+
+    // Measure 
+    
+
+    return ESP_OK;
+}

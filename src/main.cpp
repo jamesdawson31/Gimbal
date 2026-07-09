@@ -149,7 +149,7 @@ extern "C" esp_err_t app_main(void)
     
     // Setup interrupt timer
     x_task_to_notify = xTaskGetCurrentTaskHandle();
-    int control_loop_frequency = 1;                         // Hz
+    int control_loop_frequency = 100;                         // Hz
     uint32_t divider = 80;
     timer_group_t group = TIMER_GROUP_0;
     timer_idx_t timer = TIMER_0;

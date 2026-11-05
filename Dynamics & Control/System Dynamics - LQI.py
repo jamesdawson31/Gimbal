@@ -8,7 +8,7 @@ from Gain_Scheduling import *
 
 # Define the system parameters
 p = 11                              # Number of pole pairs
-Rp = 5.6                            # Phase resistance (Ohms)
+Rp = 5.9/2                            # Phase resistance (Ohms)
 Lp = 200e-6                         # Phase inductance (H)                      ASSUMED
 load_torque_1A = 800 * 9.81e-5      # Load torque @ 1A (Nm)
 lam = 2*load_torque_1A/(3*p*1)      # Flux linkage     (Wb)

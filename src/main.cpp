@@ -1,3 +1,6 @@
+#define _USE_MATH_DEFINES
+#include <math.h>
+
 // Standard libraries
 #include <stdlib.h>
 #include <stdio.h>
@@ -31,15 +34,15 @@
 #define PIN_SPI_ENC_YAW_CS          9
 #define PIN_SPI_ENC_PITCH_CS        8
 #define PIN_SPI_ENC_ROLL_CS         7
-#define PIN_MOTOR_YAW_PWM_1         10
-#define PIN_MOTOR_YAW_PWM_2         11
-#define PIN_MOTOR_YAW_PWM_3         12
-#define PIN_MOTOR_PITCH_PWM_1       13
-#define PIN_MOTOR_PITCH_PWM_2       14
-#define PIN_MOTOR_PITCH_PWM_3       15
-#define PIN_MOTOR_ROLL_PWM_1        16
-#define PIN_MOTOR_ROLL_PWM_2        17
-#define PIN_MOTOR_ROLL_PWM_3        18
+#define PIN_MOTOR_YAW_PWM_A         1
+#define PIN_MOTOR_YAW_PWM_B         2
+#define PIN_MOTOR_YAW_PWM_C         3
+#define PIN_MOTOR_PITCH_PWM_A       13
+#define PIN_MOTOR_PITCH_PWM_B       14
+#define PIN_MOTOR_PITCH_PWM_C       15
+#define PIN_MOTOR_ROLL_PWM_A        16
+#define PIN_MOTOR_ROLL_PWM_B        17
+#define PIN_MOTOR_ROLL_PWM_C        18
 
 
 static const char* TAG = "MAIN";
@@ -53,7 +56,7 @@ LSM6DSV16X_IMU imu(PIN_SPI_IMU_CS);
 AS5048AEncoder yaw_enc(PIN_SPI_ENC_YAW_CS);
 // AS5048AEncoder pitch_enc(PIN_SPI_ENC_PITCH_CS);
 // AS5048AEncoder roll_enc(PIN_SPI_ENC_ROLL_CS);
-Motor yaw_motor(PIN_MOTOR_YAW_PWM_1, PIN_MOTOR_YAW_PWM_2, PIN_MOTOR_YAW_PWM_3);
+Motor yaw_motor(PIN_MOTOR_YAW_PWM_A, PIN_MOTOR_YAW_PWM_B, PIN_MOTOR_YAW_PWM_C);
 // Motor pitch_motor(PIN_MOTOR_PITCH_PWM_1, PIN_MOTOR_PITCH_PWM_2, PIN_MOTOR_PITCH_PWM_3);
 // Motor roll_motor(PIN_MOTOR_ROLL_PWM_1, PIN_MOTOR_ROLL_PWM_2, PIN_MOTOR_ROLL_PWM_3);
 // Gimbal gimbal(&spi_bus_2, &imu, &yaw_enc, &pitch_enc, &roll_enc);
@@ -168,6 +171,47 @@ extern "C" esp_err_t app_main(void)
     );
     ESP_LOGI(TAG, "Speed controller setup.");
 
+    // Rough code for SimpleFOC
+    int pole_pairs = 11;
+    int pp = 11;
+    float Rp = 5.6;
+    float Lp = 200e-6;
+    float load_torque_1A = 800 * 9.81e-5;
+    float lam = 2*load_torque_1A/(3*pp*1);
+    float b = 5e-4;
+    float Js = 5e-5;
+    float T_load = 0;
+    float Kv_rad_s = 1/(load_torque_1A);
+    float Kv_rpm = Kv_rad_s * (60 / (2 * M_PI));
+
+    float test_voltage = 2.0f;
+
+    BLDCDriver3PWM driver(PIN_MOTOR_YAW_PWM_A, PIN_MOTOR_YAW_PWM_B, PIN_MOTOR_YAW_PWM_C);
+
+    BLDCMotor motor = BLDCMotor(pp, Rp, Kv_rpm, Lp);
+
+    
+
+    driver.init();
+
+    driver.voltage_power_supply = 24.0f;
+
+    driver.voltage_limit = test_voltage;
+
+    motor.linkDriver(&driver);
+    
+    motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
+
+    motor.controller = MotionControlType::velocity_openloop;
+
+    motor.voltage_limit = test_voltage;
+
+    motor.init();
+
+
+
+
+
     // Interrupt triggers execution of control loop code inside the main loop
     // rather than everything inside the ISR.
     bool led_on = false;
@@ -179,6 +223,7 @@ extern "C" esp_err_t app_main(void)
         // Update the state of the system
         speed_control.update();
         // printf("Hello\n");
+        motor.move(1.0f);
 
         // Test by blinking an LED
         led_on = !led_on;

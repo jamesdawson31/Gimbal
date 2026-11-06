@@ -1,0 +1,15 @@
+LTspice 24.1.9 for Windows
+Circuit: C:\Users\james\Documents\Projects\Gimbal\Electrical\current_sensing.net
+Start Time: Thu Oct 29 19:44:44 2026
+solver = Alternate
+Maximum thread count: 16
+tnom = 27
+temp = 27
+method = modified trap
+Direct Newton iteration for .op point succeeded.
+Total elapsed time: 0.582 seconds.
+
+Files loaded:
+C:\Users\james\Documents\Projects\Gimbal\Electrical\current_sensing.net
+C:\Users\james\Downloads\sbombe4\ina240a1.lib
+

@@ -15,6 +15,8 @@ lam = 2*load_torque_1A/(3*p*1)      # Flux linkage     (Wb)
 b = 5e-4                            # Viscous friction coefficient (Nms/rad)    ASSUMED
 Js = 5e-5                           # Moment of inertia (kgm^2)                 ASSUMED
 T_load = 0                          # Load torque (Nm)                          ASSUMED
+Vdc = 12
+Vmax = Vdc/np.sqrt(3)
 
 print(f"Flux linkage: {lam:.6f} Wb")
 
@@ -56,13 +58,13 @@ Ci = np.array([[0, 0, 1, 0]])
 ## LQI Controller Design
 # Define weighting matrices Qa and Ra based on maximum expected values of states and inputs
 id_max = 0.1
-iq_max = 5
+iq_max = 2
 theta_m_dot_max = rpm2radps(2000)
 theta_m_max = np.inf
 q_max = 1
 Qa = np.diag([1/id_max**2, 1/iq_max**2, 1/theta_m_dot_max**2, 1/theta_m_max**2, 1/q_max**2])
-ud_max = 12
-uq_max = 12
+ud_max = Vmax
+uq_max = Vmax
 Ra = np.diag([1/ud_max**2, 1/uq_max**2])
 
 ## Kalman Filter Design
@@ -80,10 +82,6 @@ V = np.diag(v)
 
 # Robustness parameter
 mu = 0 
-
-# Min and max values for u
-Vmin = -12
-Vmax = 12
 
 
 ## Create lookup table for gain scheduling (only run when parameter values change)
@@ -120,12 +118,29 @@ def nonlinear_dynamics(t, x_full, Ka_list, L_list):       # (t, x_full, Ka_list,
     u_cmd = LQI_input(x_hat_q, Ka)
 
     # Apply actuator saturation effects to ensure the control signal is physically possible
-    u_sat = np.clip(u_cmd, Vmin, Vmax)
+    u_mag = np.linalg.norm(u_cmd)
+
+    # Saturated:
+    if u_mag > Vmax:
+        u_sat = (Vmax/u_mag) * u_cmd
+        q_dot = 0       # anti-windup to stop integrating 
+    # Non-saturated:
+    else:
+        u_sat = u_cmd.copy()
+        q_dot = error
+    
     ud, uq = u_sat
 
+    # Calculate SVPWM double-hump waveform
+    theta_e = p*theta_m
+    u_abc = calculate_SVPWM(uq, ud, theta_e, Vdc)
+    u_dq_SVPWM = T_Clarke() @ T_Park(theta_e) @ u_abc
+    ud_SVPWM = u_dq_SVPWM[0]
+    uq_SVPWM = u_dq_SVPWM[1]
+
     # Compute state derivatives
-    id_dot = -(Rp/Lp)*id + (1/Lp)*ud + p*theta_m_dot*iq
-    iq_dot = -(Rp/Lp)*iq - (p*lam/Lp)*theta_m_dot + (1/Lp)*uq - p*theta_m_dot*id
+    id_dot = -(Rp/Lp)*id + (1/Lp)*ud_SVPWM + p*theta_m_dot*iq
+    iq_dot = -(Rp/Lp)*iq - (p*lam/Lp)*theta_m_dot + (1/Lp)*uq_SVPWM - p*theta_m_dot*id
     theta_m_2dot = (3*p*lam/(2*Js))*iq - (b/Js)*theta_m_dot - T_load/Js
     
     # Add process noise (uncertainty in the model)

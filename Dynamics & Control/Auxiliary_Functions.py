@@ -52,43 +52,54 @@ def T_Park_inv(theta):
         [np.sin(theta),  np.cos(theta)]
     ])
 
-def calculate_SVPWM(uq, ud, theta_e, Vdc):
-    # Create d-q frame vector
-    u_dq = np.array([ud, uq])
+def calculate_SVPWM(u_dq, theta_e, Vdc):
 
     # Inverse Park and Clarke transforms
     u_abc = T_Clarke_inv() @ T_Park_inv(theta_e) @ u_dq
 
-    # Extracting each phase
-    u_a = u_abc[0]
-    u_b = u_abc[1]
-    u_c = u_abc[2]
-
     # Common-mode voltage offset
-    u_offset = -(max(u_a, u_b, u_c) + min(u_a, u_b, u_c))/2
+    u_offset = -(np.max(u_abc) + np.min(u_abc))/2
 
-    # Add the offset
-    u_a += u_offset
-    u_b += u_offset
-    u_c += u_offset
+    # Add common-mode offset
+    u_abc_svpwm = u_abc + u_offset
 
     # Calculate duty cycles
-    D_a = 0.5 + u_a/Vdc
-    D_b = 0.5 + u_b/Vdc
-    D_c = 0.5 + u_c/Vdc
+    D = 0.5 + u_abc_svpwm/Vdc
 
     # Calculate average pole voltages
-    u_a = D_a * Vdc
-    u_b = D_b * Vdc
-    u_c = D_c * Vdc
+    u_pole = D * Vdc
 
     # Calculate floating motor neutral voltage
-    u_neutral = (u_a + u_b + u_c) / 3
+    u_neutral = np.mean(u_pole)
 
     # Calculate average phase-to-neutral voltages
-    u_phase_a = u_a - u_neutral
-    u_phase_b = u_b - u_neutral
-    u_phase_c = u_c - u_neutral
+    u_phase = u_pole - u_neutral
 
-    return np.array([u_phase_a, u_phase_b, u_phase_c])
-    
+    return D, u_pole, u_phase
+
+
+def calculate_u_sat(u_cmd, error, Vmax):
+    # Apply actuator saturation effects to ensure the control signal is physically possible
+    u_mag = np.linalg.norm(u_cmd)
+
+    # Apply voltage vector saturation
+    if u_mag > Vmax:
+
+        u_sat = (Vmax/u_mag) * u_cmd
+
+        # Conditional integration anti-windup
+        # Only integrate if the error helps move the controller out of saturation
+        print(u_cmd - u_sat)
+        print(np.array([0, error]))
+
+        if np.dot(u_cmd - u_sat, np.array([0, error])) > 0:
+            q_dot = 0
+        else:
+            q_dot = error
+
+    # Non-saturated
+    else:
+        u_sat = u_cmd.copy()
+        q_dot = error
+
+    return u_sat, q_dot

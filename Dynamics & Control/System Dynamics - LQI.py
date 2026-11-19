@@ -17,6 +17,7 @@ Js = 5e-5                           # Moment of inertia (kgm^2)                 
 T_load = 0                          # Load torque (Nm)                          ASSUMED
 Vdc = 12
 Vmax = Vdc/np.sqrt(3)
+Vmin = -Vdc/np.sqrt(3)
 
 print(f"Flux linkage: {lam:.6f} Wb")
 
@@ -59,7 +60,7 @@ Ci = np.array([[0, 0, 1, 0]])
 # Define weighting matrices Qa and Ra based on maximum expected values of states and inputs
 id_max = 0.1
 iq_max = 2
-theta_m_dot_max = rpm2radps(2000)
+theta_m_dot_max = rpm2radps(2500)
 theta_m_max = np.inf
 q_max = 1
 Qa = np.diag([1/id_max**2, 1/iq_max**2, 1/theta_m_dot_max**2, 1/theta_m_max**2, 1/q_max**2])
@@ -115,50 +116,31 @@ def nonlinear_dynamics(t, x_full, Ka_list, L_list):       # (t, x_full, Ka_list,
     # Compute control input using state feedback
     # Add gain interpolation later
     x_hat_q = np.append(x_hat, q)
-    u_cmd = LQI_input(x_hat_q, Ka)
+    # Calculate controller output
+    u_dq_cmd = LQI_input(x_hat_q, Ka)
 
-    # Apply actuator saturation effects to ensure the control signal is physically possible
-    u_mag = np.linalg.norm(u_cmd)
+    # Calculate speed error
+    error = r_sine_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat
 
-    # Saturated:
-    if u_mag > Vmax:
-        u_sat = (Vmax/u_mag) * u_cmd
-        q_dot = 0       # anti-windup to stop integrating 
-    # Non-saturated:
-    else:
-        u_sat = u_cmd.copy()
-        q_dot = error
-    
-    ud, uq = u_sat
+    # Apply voltage vector saturation and anti-windup
+    u_sat, q_dot = calculate_u_sat(u_dq_cmd, error, Vmax)
 
-    # Calculate SVPWM double-hump waveform
-    theta_e = p*theta_m
-    u_abc = calculate_SVPWM(uq, ud, theta_e, Vdc)
-    u_dq_SVPWM = T_Clarke() @ T_Park(theta_e) @ u_abc
-    ud_SVPWM = u_dq_SVPWM[0]
-    uq_SVPWM = u_dq_SVPWM[1]
+    # Generate SVPWM phase voltages
+    theta_e = p * theta_m
+    _, _, u_phase = calculate_SVPWM(u_sat, theta_e, Vdc)
+
+    # Transform back into dq for motor dynamics
+    u_dq = T_Park(theta_e) @ T_Clarke() @ u_phase
+    ud, uq = u_dq
+
 
     # Compute state derivatives
-    id_dot = -(Rp/Lp)*id + (1/Lp)*ud_SVPWM + p*theta_m_dot*iq
-    iq_dot = -(Rp/Lp)*iq - (p*lam/Lp)*theta_m_dot + (1/Lp)*uq_SVPWM - p*theta_m_dot*id
+    id_dot = -(Rp/Lp)*id + (1/Lp)*ud + p*theta_m_dot*iq
+    iq_dot = -(Rp/Lp)*iq - (p*lam/Lp)*theta_m_dot + (1/Lp)*uq - p*theta_m_dot*id
     theta_m_2dot = (3*p*lam/(2*Js))*iq - (b/Js)*theta_m_dot - T_load/Js
     
     # Add process noise (uncertainty in the model)
     x_dot = np.array([id_dot, iq_dot, theta_m_2dot, theta_m_dot]) + np.random.normal(0, w)
-    
-    # Conditional anti-windup
-    # error = r_square_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat
-    error = r_sine_wave(t, freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat
-
-    # If either control input is maxed in the positive direction, and the error is positive, then don't integrate the error (increase magnitude of).
-    if (u_cmd[0] > Vmax or u_cmd[1] > Vmax) and error > 0:
-        q_dot = 0
-    # If either control input is maxed in the negative direction, and the error is negative, then don't integrate the error (increase magnitude of).
-    elif (u_cmd[0] < Vmin or u_cmd[1] < Vmin) and error < 0:
-        q_dot = 0
-    # Otherwise integrate the error
-    else:
-        q_dot = error
 
     # Augmented state derivative vector
     xa_dot = np.append(x_dot, q_dot)
@@ -211,6 +193,8 @@ ud_cmd_sim = np.zeros_like(t)
 uq_cmd_sim = np.zeros_like(t)
 ud_sat_sim = np.zeros_like(t)
 uq_sat_sim = np.zeros_like(t)
+D_abc = np.zeros((len(t), 3))
+u_pole_abc = np.zeros((len(t), 3))
 i_dq = np.column_stack((id_sim, iq_sim))
 i_abc = np.zeros((len(t), 3))
 u_abc = np.zeros((len(t), 3))
@@ -221,18 +205,33 @@ for i in range(len(t)):
     # ref[i] = r_square_wave(t[i], freq=square_wave_freq, rpm=square_wave_rpm)
     ref[i] = r_sine_wave(t[i], freq=square_wave_freq, rpm=square_wave_rpm)
 
-    # Reconstruct ud and uq for visualisation
-    # u_sim = u_op - K @ (sol.y[:, i] - x_op)
+    # Reconstruct controller output
     Ka, L = gain_scheduling(theta_m_dot_hat_sim[i], theta_rpm_set, Ka_list, L_list, dir)
-    u_cmd_sim = LQI_input(x_hat_sim[i], Ka)
-    u_sat_sim = np.clip(u_cmd_sim, Vmin, Vmax)
+    u_dq_cmd = LQI_input(x_hat_sim[i], Ka)
 
-    ud_cmd_sim[i], uq_cmd_sim[i] = u_cmd_sim
-    ud_sat_sim[i], uq_sat_sim[i] = u_sat_sim
+    # Calculate speed error
+    error = r_sine_wave(t[i], freq=square_wave_freq, rpm=square_wave_rpm) - theta_m_dot_hat_sim[i]
 
-    # Inverse Clarke and Park transforms to get abc currents
-    i_abc[i] = T_Clarke_inv() @ T_Park_inv(p*theta_m_sim[i]) @ np.array(i_dq[i])
-    u_abc[i] = T_Clarke_inv() @ T_Park_inv(p*theta_m_sim[i]) @ u_sat_sim
+    # Apply saturation
+    u_sat_sim, q_dot = calculate_u_sat(u_dq_cmd, error, Vmax)
+
+    # Generate SVPWM
+    theta_e_sim = p * theta_m_sim[i]
+    D, u_pole, u_phase = calculate_SVPWM(u_sat_sim, theta_e_sim, Vdc)
+
+    # Reconstruct dq voltage
+    u_dq_SVPWM = T_Park(theta_e_sim) @ T_Clarke() @ u_phase
+
+    ud_cmd_sim[i], uq_cmd_sim[i] = u_dq_cmd
+    ud_sat_sim[i], uq_sat_sim[i] = u_dq_SVPWM
+
+    # Store SVPWM outputs
+    D_abc[i] = D
+    u_pole_abc[i] = u_pole
+
+    # Reconstruct currents and phase voltages
+    i_abc[i] = T_Clarke_inv() @ T_Park_inv(theta_e_sim) @ i_dq[i]
+    u_abc[i] = u_phase
 
 
 # Unpack phase currents and voltages
@@ -327,6 +326,33 @@ plt.xlabel('Time (s)')
 plt.grid()
 
 plt.tight_layout()
+
+
+
+plt.figure(figsize=(10,5))
+
+plt.plot(t, D_abc[:,0], label='Da')
+plt.plot(t, D_abc[:,1], label='Db')
+plt.plot(t, D_abc[:,2], label='Dc')
+
+plt.ylabel('Duty Cycle')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid()
+
+
+
+plt.figure(figsize=(10,5))
+
+plt.plot(t, u_pole_abc[:,0], label='Va pole')
+plt.plot(t, u_pole_abc[:,1], label='Vb pole')
+plt.plot(t, u_pole_abc[:,2], label='Vc pole')
+
+plt.ylabel('Average Pole Voltage (V)')
+plt.xlabel('Time (s)')
+plt.legend()
+plt.grid()
+
 plt.show()
 
 # # Ask to save results
